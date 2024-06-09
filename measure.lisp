@@ -1,0 +1,247 @@
+
+(in-package :com.ral.photometry)
+
+;; -----------------------------------------------------------------------------
+;; What if we work directly on the star image?
+
+(defun cresting-p (arr yc xc)
+  (let ((z     (aref arr yc xc)))
+    (and
+     (>= z (aref arr (1- yc) xc))
+     (>= z (aref arr (1+ yc) xc))
+     (>= z (aref arr yc (1+ xc)))
+     (>= z (aref arr yc (1- xc)))
+     
+     (> z (aref arr (- yc 2) xc))
+     (> z (aref arr (+ yc 2) xc))
+     
+     (> z (aref arr yc (- xc 2)))
+     (> z (aref arr yc (+ xc 2)))
+     
+     (> z (aref arr (1- yc) (1- xc)))
+     (> z (aref arr (1- yc) (1+ xc)))
+     
+     (> z (aref arr (1+ yc) (1- xc)))
+     (> z (aref arr (1+ yc) (1+ xc)))
+     )))
+
+(defun ring-med (arr yc xc)
+  (let* ((ring-box  (make-box-of-radius xc yc *ring-radius*))
+         (moat-box  (make-box-of-radius xc yc *moat-radius*))
+         (seqs      nil))
+    
+    (loop for row from (box-top ring-box) below (box-top moat-box) do
+            (push (subseq (array-row arr row) (box-left ring-box) (box-right ring-box)) seqs))
+
+    (loop for row from (box-top moat-box) below (box-bottom moat-box) do
+            (let ((vec  (array-row arr row)))
+              (push (subseq vec (box-left ring-box) (box-left moat-box)) seqs)
+              (push (subseq vec (box-right moat-box) (box-right ring-box)) seqs)))
+
+    (loop for row from (box-bottom moat-box) below (box-bottom ring-box) do
+            (push (subseq (array-row arr row) (box-left ring-box) (box-right ring-box)) seqs))
+
+    (let* ((vec (apply #'concatenate 'vector seqs))
+           (med (vm:median vec))
+           (mad (vm:mad vec med)))
+      (values med mad)
+      )))
+
+#|
+(let ((arr (make-array '(23 23)
+                       :element-type 'single-float
+                       :initial-element 1f0)))
+  (inspect (multiple-value-list (ring-med arr 11 11))))
+|#
+
+(defun magn (img flux)
+  (+ (img-mag-off img)
+     (* -2.5f0 (log flux 10f0))))
+
+(defun inv-magn (img mag)
+  (expt 10f0 (* -0.4f0 (- mag (img-mag-off img)))))
+
+(defun find-stars (ref-img &optional (thresh 5))
+  ;; thresh in sigma units
+  (let+ ((ref-arr     (img-arr ref-img))
+         (core-radius (img-core ref-img))
+         (med         (img-med ref-img))
+         (mad         (img-mad ref-img))
+         (srch-arr    (copy-array ref-arr))
+         (thr         (+ med (* (sd-to-mad thresh) mad)))
+         (ref-box     (inset-box (make-box-of-array ref-arr) *ring-radius* *ring-radius*)))
+    (loop for yc from (box-top ref-box) below (box-bottom ref-box) nconc
+            (loop for xc from (box-left ref-box) below (box-right ref-box) nconc
+                    (when (and (>= (aref srch-arr yc xc) thr)
+                               (cresting-p srch-arr yc xc))
+                      (let+ ((:mvb (med mad) (ring-med ref-arr yc xc))
+                             (box  (make-box-of-radius xc yc core-radius))
+                             (core (- (sum-array ref-arr box)
+                                      (* med (box-area box)))))
+                          (when (plusp core)
+                            (let* ((poisson (sqrt core))
+                                   (sd      (* +mad/sd+ mad))
+                                   (noise   (abs (complex sd poisson)))
+                                   (snr     (/ core noise)))
+                              (when (>= snr thresh)
+                                (fill-array srch-arr box med)
+                                `(,(make-star
+                                    :x    xc
+                                    :y    yc
+                                    :mag  (magn ref-img core)
+                                    :snr  snr
+                                    :core core
+                                    :sd   sd))
+                                )))))
+                  ))))
+
+;; ---------------------------------------------------------------
+
+(defvar *selection-radius*  7)
+(defvar *index-granularity* 10)
+
+(defun find-nearest-star (db xc yc)
+  (let* ((index  (truncate (max 0 (- yc *selection-radius*)) *index-granularity*))
+         (stars  (gethash index db))
+         (sel    (select-region stars yc xc *selection-radius*)))
+    (when sel
+      (flet ((dist (star)
+               (abs (complex (- (star-x star) xc)
+                             (- (star-y star) yc)))
+               ))
+        (car
+         (reduce (lambda (ans star)
+                   (let ((sdist (dist star))
+                         (adist (rest ans)))
+                     (if (< sdist adist)
+                         `(,star . ,sdist)
+                       ans)))
+                 (rest sel)
+                 :initial-value (let ((star (car sel)))
+                                  `(,star . ,(dist star)))
+                 ))
+        ))))
+
+(defun fast-star-db (img)
+  ;; Stars are y-ordered.
+  ;; Hash table keeps head of sublist of stars for every 10 units of y.
+  ;; Using hash table instead of array avoids array bounds checks.
+  (let* ((stars  (copy-seq
+                  (sort (img-stars img)
+                        #'<
+                        :key #'star-y)))
+         (star-db (make-hash-table :test #'=)))
+    (setf (gethash 0 star-db) stars)
+    (um:nlet iter ((stars stars)
+                   (ctr   0))
+      (if (endp stars)
+          star-db
+        (let* ((star  (car stars))
+               (rest  (cdr stars))
+               (y     (truncate (star-y star) *index-granularity*)))
+          (cond ((> y ctr)
+                 (loop for ix from (1+ ctr) to y do
+                         (setf (gethash ix star-db) stars))
+                 (go-iter rest y))
+                (t
+                 (go-iter rest ctr))
+                ))
+        ))
+    ))
+
+(defun star-readout (img)
+  (let ((star-db (fast-star-db img)))
+    (lambda (pane x y xx yy)
+      ;; x, y are CAPI coords,
+      ;; xx, yy are star coords
+      (let ((star (find-nearest-star star-db xx yy)))
+        (when star
+          (let ((txt (format nil "~4,1F" (star-mag star))))
+            (capi:display-tooltip pane
+                                  :x  (+ x 10)
+                                  :y  (+ y 10)
+                                  :text txt)
+            ))
+        ))))
+        
+;; ---------------------------------------------------------------
+
+(defun show-img (pane img &key binarize)
+  (let+ ((med    (img-med img))
+         (mad    (img-mad img))
+         (lo     med)
+         (hi     (+ med (* 15 mad)))
+         (arr    (img-arr img))
+         ( (ht wd) (array-dimensions arr))
+         (sf     (/ 1000 (max wd ht)))
+         (xsize  (round (* wd sf)))
+         (ysize  (round (* ht sf))))
+    (print `(:scale ,sf))
+    (when binarize
+      (let ((mad5 (+ med (* (sd-to-mad (img-thr img)) mad))))
+        (setf arr  (copy-array arr
+                               (lambda (x)
+                                 (if (>= x mad5)
+                                     hi
+                                   lo))
+                               ))))
+    (if (and nil (plt:find-named-plotter-pane pane))
+        (plt:wshow pane :xsize xsize :ysize ysize)
+      (plt:window pane :xsize xsize :ysize ysize))
+    (plt:tvscl pane arr
+               :clear  t
+               ;; :neg t
+               :magn   sf
+               :flipv  t
+               :zrange `(,lo ,hi))
+    (plt:set-move-augmentation pane
+                               (when (img-stars img)
+                                 (star-readout img)))
+    ))
+
+#|
+(defvar *saved-img*)         
+(show-img 'img *saved-img*)
+|#
+
+(defun hilight-stars (img-pane stars color)
+  (plt:with-delayed-update (img-pane)
+    (dolist (star stars)
+      (with-accessors ((ix  star-x)
+                       (iy  star-y)) star
+        (plt:draw-rect img-pane ix iy 9 9
+                       :raw t
+                       :border-color color
+                       :filled nil
+                       :border-thick 1)
+        ))))
+
+;; ---------------------------------------------------------------
+
+(defun measure-stars (img &key (thresh 5))
+  (let* ((stars (find-stars img thresh)))
+    (when stars
+      (setf (img-thr   img) thresh
+            (img-stars img) stars))
+    (let* ((snrs  (map 'vector #'star-snr stars))
+           (pc25  (vm:percentile snrs 25))
+           (pc75  (vm:percentile snrs 75)))
+      (print (list :snr_25 pc25 :snr_75 pc75))
+      (plt:histogram 'maghist snrs
+                     :clear t
+                     ;; :ylog  t
+                     :xlog t
+                     :title "SNR Histo"
+                     :xtitle "SNR"
+                     :ytitle "Density")
+      (plt:with-delayed-update ('stars)
+        (show-img 'stars img)
+        (hilight-stars 'stars stars :green))
+      (values)
+      )))
+
+#|
+  *core-radius*
+(measure-stars *saved-img* :thresh 20)
+|#
+
