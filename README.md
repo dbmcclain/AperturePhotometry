@@ -8,9 +8,9 @@ Automated Aperture Photometry engine. In conjunction with LispPlotter (available
 
 Load a FITS file with `(PHOTOM)`. See a listing of found stars with `(REPORT-STARS img)`.
 
-**PHOTOM** _&optional filename => img_
+**PHOTOM** _&optional filename channel => img_
 
-Reads in the G channel, displays the image on screen, finds all the stars with SNR > 5σ, measures them. The found stars are shown in a sister panel with green outlines around each found star. Move the mouse to a star, in either panel, and see the measured magnitude. If you don't provide a filename, the system will bring up a file selection dialog for you to choose your file.
+Reads in the G channel, by default, displays the image on screen, finds all the stars with SNR > 5σ, measures them. The found stars are shown in a sister panel with green outlines around each found star. Move the mouse to a star, in either panel, and see the measured magnitude. If you don't provide a filename, the system will bring up a file selection dialog for you to choose your file. If the file is from a CFA, it will be demoisaic'd from the Bayer matrix, to pull out one of the green channels, or whichever channel you specified.
 
 **REPORT-STARS** _img &key sort =>_
 
