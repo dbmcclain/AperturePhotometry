@@ -6,7 +6,7 @@ The screenshot shows us running an image of the area around 3C273. The image cam
 
 _**Automated Aperture Photometry Engine**_ In conjunction with LispPlotter (available in a sister repo), it opens a FITS file, extracts the Green (or only) channel, and performs automated star detection and measurement, showing the results on screen. Move the mouse to stars in either pane and see the measured magnitude next to your cursor. 
 
-Load a FITS file with `(PHOTOM)`. See a listing of found stars with `(REPORT-STARS img)`.
+Load and analyze a FITS file with `(PHOTOM)`. See a listing of found stars with `(REPORT-STARS img)`.
 
 **PHOTOM** _&optional filename channel => img_
 
