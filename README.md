@@ -2,6 +2,8 @@
 
 ![Screenshot of 3c273](https://github.com/dbmcclain/AperturePhotometry/assets/3160577/d3f79667-e961-4f46-87ce-e4d5935bffa9)
 
+The screenshot shows us running an image of the area around 3C273. The cursor in the left panel image is pointing at 3C273. It has been appointed a magnitude of 12.9. All other stars are relative to this scale.
+
 Automated Aperture Photometry engine. In conjunction with LispPlotter (available in a sister repo), it opens a FITS file, extracts the Green (or only) channel, and performs automated star finding and measuring, showing the results on screen. Move the mouse to stars in either pane and see the measured magnitude. 
 
 Load a FITS file with `(PHOTOM)`. See a listing of found stars with `(REPORT-STARS img)`.
