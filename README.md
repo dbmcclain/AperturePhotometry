@@ -58,7 +58,7 @@ There is a facility for planting fake stars, then reaping them together with rea
 ---
 So what is going on here? I thought that DAOPHOT was the canonical standard for Aperture Photometry?
 
-Yes, it probably is. And I should probably have a close look at its source code. The author is highly regarded, and DAOPHOT has been around for at least 20 years. But it was written in Fortran. Perhaps now modernized with C, or C++, or perhaps even has a Java or Python interface. That's fine if you like those things for yourself.
+Yes, it probably is. And I should probably have a close look at its source code. Its author, Peter Stetson, is highly regarded, and DAOPHOT has been around for at least 20 years. But it was written in Fortran. Perhaps now modernized with C, or C++, or perhaps even has a Java or Python interface. That's fine if you like those things for yourself.
 
 For myself, I have the time to discover things for myself, and I thrive best in a highly interactive, extensible, programming environment like that offered by Common Lisp. I like to explore ideas from the keyboard and see immediate results, or not. I love having Lisp Macrology at my fingertips, to bend the core language to my DSL needs.
 
