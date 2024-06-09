@@ -5,7 +5,7 @@ _**Automated Aperture Photometry Engine**_
 
 ![Screenshot of 3c273](https://github.com/dbmcclain/AperturePhotometry/assets/3160577/f7bb2c68-9346-4a18-8934-4a6ca91ef306)
 
-The screenshot shows us running a 540x540 pixel subframe image of the area around 3C273. The image came from a Seestar 50S telescope which made 10x10s exposures. Those FITS frames were pulled into PixInsight for coalignment, then drizzle integrated 1:1, with Windsorized sigma clipping to remove hot/cold pixels, to produce the stacked image shown here. The cursor in the left panel view is pointing at 3C273. _(The cursor was a red crosshair, but the screen capture momentarily replaced it with the standard pointer arrow.)_ By use of a suitable magnitude offset on the engineering scale, it has been appointed a magnitude of 12.9. All other stars are relative to this scale.
+The screenshot shows us running a 540x540 pixel subframe image of the area around 3C273. The image came from a Seestar 50S telescope which made 10x10s exposures. Those FITS frames were pulled into PixInsight for coalignment, then drizzle integrated 1:1, with Windsorized sigma clipping to remove hot/cold pixels, to produce the stacked image shown here. The cursor in the left panel view is pointing at 3C273. _(The cursor was a red crosshair, but the screen capture momentarily replaced it with the standard pointer arrow.)_ By use of a suitable magnitude offset on the engineering scale, it has been appointed a magnitude of 12.9. All other stars measure relative to this scale.
 
 In conjunction with LispPlotter (available in a sister repo), it opens a FITS file, extracts the Green (or only) channel, and performs automated star detection and measurement, showing the results on screen. Move the mouse to stars in either pane and see the measured magnitude next to your cursor. 
 
@@ -50,8 +50,20 @@ Show an image, _img_, in any pane of your choosing - just give it a name. BINARI
 `(show-img 'img *saved-img* :binarize t)`
 
 ---
-An _img_ is a data structure that contains the image array shown on screen, the list of stars detected and measured, some info about the image, like its overall Median and MAD, as well as the limit used during detection (by default 5σ).
+An _**img**_ is a data structure that contains the image array shown on screen, the list of stars detected and measured, some info about the image, like its overall Median and MAD, as well as the σ-limit used during detection (by default 5σ). The SNR of a star measurement is based on the ratio of its measured summed Flux in a core region covering the star, and the RMS sum of background noise levels from nearby image MAD measurement, and the Poisson self-noise of the starlight flux. Bright stars are self-limiting, with their SNR growing as Sqrt(Flux). Faint stars are limited by the sky background, with SNR growing in direct proportion to their measured Flux.
 
-There is a facility for planting fake stars, then reaping them together with real stars. Afterward the list of known fake stars is checked againt the list of harvested stars to see how well the engine performed. Do this for a series of known magnitudes to get an estimate for the quality of measurements being performed, and its repeatability. Also allows for estimating the limiting magnitude in the image, or the probability of detecting a faint star at some magnitude.
+---
+There is a facility for planting fake stars, then reaping them together with real stars. Afterward the list of known fake stars is checked against the list of harvested stars to see how well the engine performed. Do this for a series of known magnitudes to get an estimate for the quality of measurements being performed, and its repeatability. Also allows for estimating the limiting magnitude in the image, or the probability of detecting a faint star at some magnitude.
+
+**AUTO-CAL** _img => results_
+
+Takes an _img_ and runs an automated series of fake star planting and harvesting, for magnitudes 9 to 18 in steps of 0.5 mag. It collects the results of harvested fakes and presents them as a list. The list contains, for each magnitude level, how many of the 100 planted fakes at that magnitude were recovered, what their mean magnitude measurement reported, what the standard deviation of those measurements was, and what their mean SNR was. _results_ is a list of lists with this information.
+
+---
+So what is going on here? I thought that _**DAOPHOT**_ was the canonical standard for Aperture Photometry?
+
+Yes, it probably is. And I should probably have a close look at its source code. Its author, Peter Stetson, is highly regarded, and _**DAOPHOT**_ has been around for at least 20 years. But it was written in Fortran. Perhaps now modernized with C, or C++, or perhaps even has a Java or Python interface. That's fine if you like those things for yourself.
+
+But I now have the time to discover things for myself, and I thrive best in a highly interactive, extensible, programming environment like that offered by Common Lisp. I like to explore ideas right at the keyboard and see immediate results, or not. Lisp lets me do all of that. I love having Lisp Macrology at my fingertips, to bend the core language to my DSL needs. And I love having to think really hard about what the measurement process actually means. You don't get to do any of that if you just use _**DAOPHOT**_.
 
 This is very much an ongoing work in progress. Feel free to jump in there and try your own ideas!
