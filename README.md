@@ -19,7 +19,6 @@ Reads in the G channel, by default, displays the image on screen, finds all the 
 
 Print a report of the found stars for image _img_. By default the report is shown in magnitude order, but you can specify :X or :Y ordering.
 
-There is a facility for planting fake stars, then reaping them together with real stars. Afterward the list of known fake stars is checked againt the list of harvested stars to see how well the engine performed. Do this for a series of known magnitudes to get an estimate for the quality of measurements being performed, and its repeatability. Also allows for estimating the limiting magnitude in the image, or the probability of detecting a faint star at some magnitude.
 ```
 COM.RAL.PHOTOMETRY 7 > (report-stars *sub*)
 
@@ -40,5 +39,7 @@ Count  Star Pos       Mag     SNR  CoreSum  RingSD
  12    627  788     11.53   167.2    28208    16.3
 ...
 ```
+
+There is a facility for planting fake stars, then reaping them together with real stars. Afterward the list of known fake stars is checked againt the list of harvested stars to see how well the engine performed. Do this for a series of known magnitudes to get an estimate for the quality of measurements being performed, and its repeatability. Also allows for estimating the limiting magnitude in the image, or the probability of detecting a faint star at some magnitude.
 
 This is very much an ongoing work in progress. Feel free to jump in there and try your own ideas!
