@@ -96,6 +96,28 @@
                   ))))
 
 ;; ---------------------------------------------------------------
+;; Live history scanning - how to provide a list of detected and
+;; measured stars to the GUI running a mouse cursor, which wants to
+;; display the magnitude of the star nearest to the cursor?
+;;
+;; We need the list of stars to remain a list, so that tools like Lisp
+;; FIND, POSITION, SUBSEQ will work on sections of the list. But we
+;; want to find the relevant location in the list as quickly as
+;; possible.
+;;
+;; So the solution here uses a hash-table to store the head of the
+;; sublist for each section of the sky, but all of the stars remain in
+;; one grand list.
+;;
+;; We start by sorting the stars into Y sequence, then for each 10
+;; pixel band, we have one hashtable entry that points to the start of
+;; the sublist corresponding to that Y coord value and higher.
+;; Thereafter, we turn the process over to SELECT-REGION, which uses
+;; POSITION, and SUBSEQ on the sublist of stars.
+;;
+;; Seems to work pretty well...
+;; -------------------------------------------------------------
+
 
 (defvar *selection-radius*  7)
 (defvar *index-granularity* 10)

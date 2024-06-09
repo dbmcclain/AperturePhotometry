@@ -841,7 +841,8 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
          (sub-arr   (make-image-array len len
                                       :initial-element med))
          (src-box   (box-intersection img-box (make-box-of-radius xc yc radius)))
-         (dst-box   (box-intersection (make-box-of-array sub-arr)
+         (sub-box   (make-box-of-array sub-arr))
+         (dst-box   (box-intersection sub-box
                                       (move-box src-box (- radius xc) (- radius yc))))
          (wd        (box-width src-box))
          (src-lf    (box-left src-box))
@@ -869,11 +870,14 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
                             src-row)
                 ;; else
                 (replace dst-row src-row))))
-    (let* ((med  (vm:median sub-arr))
-           (mad  (vm:mad sub-arr med)))
-      (setf (img-arr new-img) sub-arr
-            (img-med new-img) med
-            (img-mad new-img) mad))
+    (setf (img-arr new-img) sub-arr)
+    #|
+    (when (equalp sub-box dst-box)
+      (let* ((med  (vm:median sub-arr))
+             (mad  (vm:mad sub-arr med)))
+        (setf (img-med new-img) med
+              (img-mad new-img) mad)))
+    |#
     new-img
     ))
 
@@ -916,11 +920,15 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
 
 (sub-image 297 417)
 
-(setf *saved-img* (photom))
+
+
+(show-img 'test (img-slice *saved-img* 100 100 200))
+
+(setf *saved-img* (with-seestar (photom)))
 (defvar *sub* (img-slice *saved-img* 499 499 499))
+(measure-stars *sub* :thresh 5)
 (show-img 'img *saved-img* :binarize t)
 (show-img 'img *saved-img* :binarize nil)
-(measure-stars *sub* :thresh 5)
 (show-img 'sub *sub* :binarize t)
 (show-img 'sub *sub* :binarize nil)
 (report-stars *sub*)
