@@ -49,6 +49,8 @@ Show an image, _img_, in any pane of your choosing - just give it a name. BINARI
 
 `(show-img 'img *saved-img* :binarize t)`
 
+---
+
 There is a facility for planting fake stars, then reaping them together with real stars. Afterward the list of known fake stars is checked againt the list of harvested stars to see how well the engine performed. Do this for a series of known magnitudes to get an estimate for the quality of measurements being performed, and its repeatability. Also allows for estimating the limiting magnitude in the image, or the probability of detecting a faint star at some magnitude.
 
 This is very much an ongoing work in progress. Feel free to jump in there and try your own ideas!
