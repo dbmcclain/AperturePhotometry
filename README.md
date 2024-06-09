@@ -60,10 +60,10 @@ There is a facility for planting fake stars, then reaping them together with rea
 Takes an _img_ and runs an automated series of fake star planting and harvesting, for magnitudes 9 to 18 in steps of 0.5 mag. It collects the results of harvested fakes and presents them as a list. The list contains, for each magnitude level, how many of the 100 planted fakes at that magnitude were recovered, what their mean magnitude measurement reported, what the standard deviation of those measurements was, and what their mean SNR was. _results_ is a list of lists with this information.
 
 ---
-So what is going on here? I thought that DAOPHOT was the canonical standard for Aperture Photometry?
+So what is going on here? I thought that _**DAOPHOT**_ was the canonical standard for Aperture Photometry?
 
-Yes, it probably is. And I should probably have a close look at its source code. Its author, Peter Stetson, is highly regarded, and DAOPHOT has been around for at least 20 years. But it was written in Fortran. Perhaps now modernized with C, or C++, or perhaps even has a Java or Python interface. That's fine if you like those things for yourself.
+Yes, it probably is. And I should probably have a close look at its source code. Its author, Peter Stetson, is highly regarded, and _**DAOPHOT**_ has been around for at least 20 years. But it was written in Fortran. Perhaps now modernized with C, or C++, or perhaps even has a Java or Python interface. That's fine if you like those things for yourself.
 
-But I now have the time to discover things for myself, and I thrive best in a highly interactive, extensible, programming environment like that offered by Common Lisp. I like to explore ideas right at the keyboard and see immediate results, or not. Lisp lets me do all of that. I love having Lisp Macrology at my fingertips, to bend the core language to my DSL needs. And I love having to think really hard about what the measurement process actually means. You don't get to do any of that if you just use DAOPHOT.
+But I now have the time to discover things for myself, and I thrive best in a highly interactive, extensible, programming environment like that offered by Common Lisp. I like to explore ideas right at the keyboard and see immediate results, or not. Lisp lets me do all of that. I love having Lisp Macrology at my fingertips, to bend the core language to my DSL needs. And I love having to think really hard about what the measurement process actually means. You don't get to do any of that if you just use _**DAOPHOT**_.
 
 This is very much an ongoing work in progress. Feel free to jump in there and try your own ideas!
