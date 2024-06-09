@@ -869,7 +869,11 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
                             src-row)
                 ;; else
                 (replace dst-row src-row))))
-    (setf (img-arr new-img) sub-arr)
+    (let* ((med  (vm:median sub-arr))
+           (mad  (vm:mad sub-arr med)))
+      (setf (img-arr new-img) sub-arr
+            (img-med new-img) med
+            (img-mad new-img) mad))
     new-img
     ))
 
@@ -920,4 +924,5 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
 (show-img 'sub *sub* :binarize t)
 (show-img 'sub *sub* :binarize nil)
 (report-stars *sub*)
+
  |#
