@@ -55,6 +55,7 @@ An _**img**_ is a data structure that contains the image array shown on screen, 
 ---
 There is a facility for planting fake stars, then reaping them together with real stars. Afterward the list of known fake stars is checked against the list of harvested stars to see how well the engine performed. Do this for a series of known magnitudes to get an estimate for the quality of measurements being performed, and its repeatability. Also allows for estimating the limiting magnitude in the image, or the probability of detecting a faint star at some magnitude.
 
+---
 So what is going on here? I thought that DAOPHOT was the canonical standard for Aperture Photometry?
 
 Yes, it probably is. And I should probably have a close look at its source code. The author is highly regarded, and DAOPHOT has been around for at least 20 years. But it was written in Fortran. Perhaps now modernized with C, or C++, or perhaps even has a Java or Python interface. That's fine if you like those things for yourself.
