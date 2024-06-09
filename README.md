@@ -11,10 +11,12 @@ In conjunction with LispPlotter (available in a sister repo), it opens a FITS fi
 
 Load and analyze a FITS file with `(PHOTOM)`. See a listing of found stars with `(REPORT-STARS img)`.
 
+---
 **PHOTOM** _&optional filename channel => img_
 
 Reads in the G channel, by default, displays the image on screen, finds all the stars with SNR > 5σ, measures them. The found stars are shown in a sister panel with green outlines around each found star. Move the mouse to a star, in either panel, and see the measured magnitude next to the mouse cursor. If you don't provide a filename, the system will bring up a file selection dialog for you to choose your file. If the file is from a CFA, it will be demoisaic'd from the Bayer matrix, to pull out one of the green channels, or whichever channel you specified. Channels can be one of 0-4, :R, :G, or :B.
 
+---
 **REPORT-STARS** _img &key sort =>_
 
 Print a report of the found stars for image _img_. By default the report is shown in magnitude order, but you can specify :X or :Y ordering.
@@ -39,6 +41,7 @@ Count  Star Pos       Mag     SNR  CoreSum  RingSD
  12    627  788     11.53   167.2    28208    16.3
 ...
 ```
+---
 
 There is a facility for planting fake stars, then reaping them together with real stars. Afterward the list of known fake stars is checked againt the list of harvested stars to see how well the engine performed. Do this for a series of known magnitudes to get an estimate for the quality of measurements being performed, and its repeatability. Also allows for estimating the limiting magnitude in the image, or the probability of detecting a faint star at some magnitude.
 
