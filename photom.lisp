@@ -457,6 +457,7 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
                (* 5 (abs (complex (sqrt (inv-mag x)) nf-sigma)))))
       (plt:fplot 'plt2 '(6 20) (lambda (x) (/ (inv-mag x) (nf x) 0.2))
                  :clear t
+                 :thick 2
                  :ylog  t
                  :title "SNR vs Magnitude"
                  :xtitle "Star Magnitude [mag]"
