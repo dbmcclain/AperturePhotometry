@@ -61,10 +61,81 @@
 (defun inv-magn (img mag)
   (expt 10f0 (* -0.4f0 (- mag (img-mag-off img)))))
 
+;; ---------------------------------------------------------------
+;; For manual checking
+#|
+(measure-location *sub* 694.  226.)
+|#
+
+(defun measure-location (img xc yc)
+  (let+ ((arr         (img-arr img))
+         (core-radius (img-core img))
+         (core-width  (1+ (* 2 core-radius)))
+         (sub-arr     (extract-subarray arr (make-box-of-radius xc yc core-radius)))
+         (ht          (array-dimension sub-arr 0))
+         (row-sum     (let ((acc (copy-seq (array-row sub-arr 0))))
+                        (loop for row from 1 below ht do
+                                (map-into acc #'+ acc (array-row sub-arr row)))
+                        acc))
+         (ramp        (vm:framp ht))
+         (xcent       (round
+                       (+ xc (- core-radius)
+                          (/ (vm:total (map 'vector #'* ramp row-sum))
+                             (vm:total row-sum)))))
+         (col-sum     (let ((acc (array-col sub-arr 0)))
+                        (loop for col from 1 below ht do
+                                (map-into acc #'+ acc (array-col sub-arr col)))
+                        acc))
+         (ycent       (round
+                       (+ yc (- core-radius)
+                         (/ (vm:total (map 'vector #'* ramp col-sum))
+                            (vm:total col-sum))))))
+    (format t "~%Starting positon ~D,~D" xc yc)
+    (format t "~%Centroid position ~D,~D" xcent ycent)
+
+    (let+ ((med         (img-med img))
+           (mad         (img-mad img))
+           (thresh      (img-thr img)) ;; in SD units
+           (thr         (+ med (* (sd-to-mad thresh) mad))))
+      (if (< (aref arr ycent xcent) thr)
+          "Failed initial threshold"
+        ;; else
+        (if (not (cresting-p arr ycent xcent))
+            "Failed to crest"
+          ;; else
+          (let+ ((:mvb (med mad) (ring-med arr ycent xcent))
+                 (box  (make-box-of-radius xcent ycent core-radius))
+                 (core (- (sum-array arr box)
+                          (* med (box-area box)))))
+            (if (plusp core)
+                (let* ((poisson (sqrt core))
+                       (sd      (* +mad/sd+ mad core-width))
+                       (noise   (abs (complex sd poisson)))
+                       (snr     (/ core noise)))
+                  (if (>= snr thresh)
+                      (make-star
+                       :x    xcent
+                       :y    ycent
+                       :mag  (magn img core)
+                       :snr  snr
+                       :core core
+                       :sd   sd)
+                    ;; else
+                    "Failed second threshold on summed flux."
+                    ))
+              ;; else
+              "Summed Flux not positive."))
+          )))
+    ))
+
+;; -------------------------------------------------------------------
+;; Automated Star Detection and Measurement
+
 (defun find-stars (ref-img &optional (thresh 5))
   ;; thresh in sigma units
   (let+ ((ref-arr     (img-arr ref-img))
          (core-radius (img-core ref-img))
+         (core-width  (1+ (* 2 core-radius)))
          (med         (img-med ref-img))
          (mad         (img-mad ref-img))
          (srch-arr    (copy-array ref-arr))
@@ -80,7 +151,7 @@
                                       (* med (box-area box)))))
                           (when (plusp core)
                             (let* ((poisson (sqrt core))
-                                   (sd      (* +mad/sd+ mad))
+                                   (sd      (* +mad/sd+ mad core-width))
                                    (noise   (abs (complex sd poisson)))
                                    (snr     (/ core noise)))
                               (when (>= snr thresh)

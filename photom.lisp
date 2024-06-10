@@ -446,7 +446,8 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
   (plt:fplot 'plt '(0 100) (lambda (x) (* 5 (abs (complex (sqrt x) 7.5)))) :color :red))
 
 (with-seestar
-  (let ((nf-sigma (* 2 +mad/sd+)))
+  (let* ((mad      11)
+         (nf-sigma (* mad +mad/sd+ (1+ (* 2 *core-radius*)))))
     (labels ((inv-mag (x)
                (expt 10.0 (* -0.4 (- x *mag-offset*))))
              (nf (x)
@@ -887,16 +888,18 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
   (let ((new-img   (copy-img img))
         (new-arr   (extract-subarray (img-arr img)
                                      (make-box-of-radius xc yc radius))))
-    (setf (img-arr new-img)   new-arr
-          (img-stars new-img) nil)
     (when binarize
       (let* ((med (img-med new-img))
              (mad (img-mad new-img))
              (sd  (* +mad/sd+ mad))
-             (lim (+ med (* sd (img-thr new-img)))))
-        (array-unop new-arr (lambda (x)
-                              (if (>= x lim) 1f0 0f0)))
+             (lim (+ med (* sd (img-thr new-img))))
+             (vec (vm:make-overlay-vector new-arr)))
+        (map-into vec (lambda (x)
+                        (if (>= x lim) 1f0 0f0))
+                  vec)
         ))
+    (setf (img-arr new-img)   new-arr
+          (img-stars new-img) nil)
     new-img))
         
 (defun show-sub-dets (img xc yc)
@@ -938,6 +941,8 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
 
 (sub-image 297 417)
 
+(show-sub-dets *sub* 458 220)
+x 459.  y 219.
 
 
 (show-img 'test (img-slice *saved-img* 100 100 200))
@@ -951,6 +956,7 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
 (show-img 'sub *sub* :binarize t)
 (show-img 'sub *sub* :binarize nil)
 (report-stars *sub*)
+(report-stars *saved-img*)
 
  |#
 #|
