@@ -66,8 +66,6 @@
          (xs        (vops:voffset (- radius) (vm:framp xtnt)))
          (exps      (map 'vector (um:rcurry #'gaussian sigma) xs))
          (fake      (vm:outer-prod exps exps))
-         (core-xtnt (1+ (* 2 *core-radius*)))
-         ( (lf tp rt bt) (make-box-centered radius radius core-xtnt core-xtnt))
          (flux      (vm:total fake))
          (mag       (+ *mag-offset* (* -2.5f0 (log flux 10)))))
     `(,fake ,radius ,mag)))

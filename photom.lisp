@@ -41,8 +41,8 @@
     (funcall fn)))
 
 (defun do-with-seestar-channel (fn)
-  (let* ((*core-radius*   3)
-         (*mag-offset*    #.(+ 9.4f0 (- 12.9f0 0.8617316f0))) ;; 9.4f0)
+  (let* ((*core-radius*   2)
+         (*mag-offset*    #.(+ 9.4f0 (- 12.9f0 0.8617316f0) -0.1f0)) ;; 9.4f0)
          (*fake-star*     (or *fake-star-75*
                               (let ((*core-radius* 3))
                                 (setf *fake-star-75* (make-gaussian-fake-star :sigma 0.75))))))
@@ -449,7 +449,7 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
   (plt:fplot 'plt '(0 100) (lambda (x) (* 5 (abs (complex (sqrt x) 7.5)))) :color :red))
 
 (with-seestar
-  (let* ((mad      11)
+  (let* ((mad      13)
          (nf-sigma (* mad +mad/sd+ (1+ (* 2 *core-radius*)))))
     (labels ((inv-mag (x)
                (expt 10.0 (* -0.4 (- x *mag-offset*))))
@@ -950,6 +950,9 @@ x 459.  y 219.
 
 
 (show-img 'test (img-slice *saved-img* 100 100 200))
+
+(with-seestar-channel
+  (setf *saved-img* (photom)))
 
 (with-seestar
   (setf *saved-img* (photom)))
