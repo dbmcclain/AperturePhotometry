@@ -8,6 +8,7 @@
   :components  ((:file "packages")
                 (:file "boxes")
                 (:file "handy")
+                (:file "array-ops")
                 (:file "photom")
                 (:file "fits-reader")
                 (:file "measure")

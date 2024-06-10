@@ -1,58 +1,10 @@
+;; handy.lisp
+;;
+;; DM/RAL  2024/06/10 06:03:31 UTC
+;; ----------------------------------
 
 (in-package :com.ral.photometry)
 
-;; -------------------------------------------------------
-
-(defun make-image-array (nrows ncols &rest args)
-  (apply #'make-array `(,nrows ,ncols)
-         :element-type 'single-float
-         args))
-
-(defun copy-array (arr &optional fn)
-  (let* ((arr2  (apply #'make-image-array (array-dimensions arr)))
-         (vec  (vm:make-overlay-vector arr))
-         (vec2 (vm:make-overlay-vector arr2)))
-    (if fn
-        (map-into vec2 fn vec)
-      ;; else
-      (replace vec2 vec))
-    arr2))
-
-(defun fill-array (arr box val)
-  (let* ((lf  (box-left box))
-         (wd  (box-width box)))
-    (loop for row from (box-top box) below (box-bottom box) do
-          (let* ((start (array-row-major-index arr row lf))
-                 (end   (+ start wd))
-                 (vec   (vm:make-overlay-vector arr :start start :end end)))
-            (fill vec val))
-            )))
-
-(defun sum-array (arr box)
-  (let* ((lf  (box-left box))
-         (wd  (box-width box)))
-    (loop for row from (box-top box) below (box-bottom box) sum
-          (let* ((start  (array-row-major-index arr row lf))
-                 (end    (+ start wd))
-                 (vec    (vm:make-overlay-vector arr :start start :end end)))
-            (vm:total vec))
-            )))
-
-(defun array-row (arr row)
-  (let* ((start (array-row-major-index arr row 0))
-         (end   (+ start (array-dimension arr 1))))
-    (vm:make-overlay-vector arr
-                            :start start
-                            :end   end)))
-
-(defun array-col (arr col)
-  (let* ((ht   (array-dimension arr 0))
-         (vec  (make-array ht
-                           :element-type (array-element-type arr))))
-    (loop for row from 0 below ht do
-            (setf (aref vec row) (aref arr row col)))
-    vec))
-  
 (defun clip (x lo hi)
   (if (< x lo)
       lo

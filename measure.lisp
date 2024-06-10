@@ -113,16 +113,26 @@
 ;; pixel band, we have one hashtable entry that points to the start of
 ;; the sublist corresponding to that Y coord value and higher.
 ;; Thereafter, we turn the process over to SELECT-REGION, which uses
-;; POSITION, and SUBSEQ on the sublist of stars.
+;; POSITION and SUBSEQ, on the sublist of stars.
 ;;
 ;; Seems to work pretty well...
+;;
+;; One thing to note, however, is that this matchup with mouse cursor
+;; position will work best when the scale of the display is nearly
+;; 1:1, or even more magnified.
+;;
+;; That typically means working on subimage views instead of the whole
+;; image.  Squeezing a whole image into a small window implies the
+;; loss of fine positioning within the image array..
+;;
 ;; -------------------------------------------------------------
 
-
-(defvar *selection-radius*  7)
-(defvar *index-granularity* 10)
+(defvar *selection-radius*  7)  ;; mouse position must be within 7 1:1 pixels of the star
+(defvar *index-granularity* 10) ;; record sublist heads for every 10 Y pixels
 
 (defun find-nearest-star (db xc yc)
+  ;; db is the Hash Table database pointing to star sublist sections
+  ;; of the overall star list.
   (let* ((index  (truncate (max 0 (- yc *selection-radius*)) *index-granularity*))
          (stars  (gethash index db))
          (sel    (select-region stars yc xc *selection-radius*)))
@@ -145,6 +155,7 @@
         ))))
 
 (defun fast-star-db (img)
+  ;; Construct a fast lookup for Y positions in the star list.
   ;; Stars are y-ordered.
   ;; Hash table keeps head of sublist of stars for every 10 units of y.
   ;; Using hash table instead of array avoids array bounds checks.
@@ -172,10 +183,12 @@
     ))
 
 (defun star-readout (img)
+  ;; Provide a callback function to augment the mouse movement handler
+  ;; in Plotter. Handler will be called from within the CAPI thread.
   (let ((star-db (fast-star-db img)))
     (lambda (pane x y xx yy)
-      ;; x, y are CAPI coords,
-      ;; xx, yy are star coords
+      ;; x, y are CAPI mouse coords,
+      ;; xx, yy are star image array coords.
       (let ((star (find-nearest-star star-db xx yy)))
         (when star
           (let ((txt (format nil "~4,1F" (star-mag star))))
@@ -189,6 +202,9 @@
 ;; ---------------------------------------------------------------
 
 (defun show-img (pane img &key binarize)
+  ;; Show an img o a pane. Optional binarize.
+  ;; Default is linear z scaling from Median to Median + 15*MAD ≈ 10σ
+  ;; Binarize is hi contrast at 0 and 5σ levels.
   (let+ ((med    (img-med img))
          (mad    (img-mad img))
          (lo     med)
@@ -201,15 +217,11 @@
     (print `(:scale ,sf))
     (when binarize
       (let ((mad5 (+ med (* (sd-to-mad (img-thr img)) mad))))
-        (setf arr  (copy-array arr
-                               (lambda (x)
-                                 (if (>= x mad5)
-                                     hi
-                                   lo))
-                               ))))
-    (if (and nil (plt:find-named-plotter-pane pane))
-        (plt:wshow pane :xsize xsize :ysize ysize)
-      (plt:window pane :xsize xsize :ysize ysize))
+        (setf arr  (map-array (lambda (x)
+                                (if (>= x mad5) hi lo))
+                              arr))
+        ))
+    (plt:window pane :xsize xsize :ysize ysize)
     (plt:tvscl pane arr
                :clear  t
                ;; :neg t

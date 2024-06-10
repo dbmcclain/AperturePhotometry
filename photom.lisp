@@ -831,6 +831,7 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
 ;; ---------------------------------------------------------------
 ;; Slices - sub-images of images
 
+#|
 (defun img-slice (img xc yc radius &key binarize)
   (let+ ((new-img   (copy-img img))
          (arr       (img-arr img))
@@ -880,7 +881,24 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
     |#
     new-img
     ))
+|#
 
+(defun img-slice (img xc yc radius &key binarize)
+  (let ((new-img   (copy-img img))
+        (new-arr   (extract-subarray (img-arr img)
+                                     (make-box-of-radius xc yc radius))))
+    (setf (img-arr new-img)   new-arr
+          (img-stars new-img) nil)
+    (when binarize
+      (let* ((med (img-med new-img))
+             (mad (img-mad new-img))
+             (sd  (* +mad/sd+ mad))
+             (lim (+ med (* sd (img-thr new-img)))))
+        (array-unop new-arr (lambda (x)
+                              (if (>= x lim) 1f0 0f0)))
+        ))
+    new-img))
+        
 (defun show-sub-dets (img xc yc)
   (let* ((sub-img (img-slice img xc yc (img-core img)))
          (arr     (img-arr sub-img))
@@ -924,7 +942,8 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
 
 (show-img 'test (img-slice *saved-img* 100 100 200))
 
-(setf *saved-img* (with-seestar (photom)))
+(with-seestar
+  (setf *saved-img* (with-seestar (photom))))
 (defvar *sub* (img-slice *saved-img* 499 499 499))
 (measure-stars *sub* :thresh 5)
 (show-img 'img *saved-img* :binarize t)
@@ -932,5 +951,31 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
 (show-img 'sub *sub* :binarize t)
 (show-img 'sub *sub* :binarize nil)
 (report-stars *sub*)
+
+ |#
+#|
+(let+ ((arr (img-arr *sub*))
+       (med (img-med *sub*))
+       (mad (img-mad *sub*))
+       ( (ht wd) (array-dimensions arr))
+       (wdx (um:ceiling-pwr2 wd))
+       (htx (um:ceiling-pwr2 ht))
+       (wrk-arr (make-image-array htx wdx :initial-element med)))
+  (implant-subarray wrk-arr arr 
+                    (truncate (- htx ht) 2)
+                    (truncate (- wdx wd) 2))
+  (let ((vec (vm:make-overlay-vector wrk-arr)))
+    (map-into vec (um:rcurry #'- med) vec))
+  (plt:window 'wrk :xsize wdx :ysize htx)
+  (plt:tvscl 'wrk (vm:shifth wrk-arr)
+             :clear t
+             :zrange `(,med ,(+ med (* 15 mad))))
+  (let+ ((farr (fft2d:fwd-magnitude wrk-arr)))
+    (plt:window 'fft :xsize wdx :ysize htx)
+    (plt:tvscl 'fft (vm:shifth farr)
+               :clear t
+               :zlog t)
+    ))
+
 
  |#

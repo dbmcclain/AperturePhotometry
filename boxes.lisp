@@ -102,3 +102,5 @@ k         (>= rt_o rt_i)
     (make-box (min lf rt) (min tp bt)
               (max lf rt) (max tp bt))))
 
+(defun copy-box (box)
+  (copy-seq box))
