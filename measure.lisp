@@ -155,16 +155,17 @@
                                    (noise   (abs (complex sd poisson)))
                                    (snr     (/ core noise)))
                               (when (>= snr thresh)
-                                (fill-array srch-arr box med)
-                                `(,(make-star
-                                    :x    xc
-                                    :y    yc
-                                    :mag  (magn ref-img core)
-                                    :snr  snr
-                                    :core core
-                                    :sd   sd))
-                                )))))
-                  ))))
+                                (let ((erasure-box (make-box-of-radius xc yc *erasure-radius*)))
+                                  (fill-array srch-arr erasure-box med)
+                                  `(,(make-star
+                                      :x    xc
+                                      :y    yc
+                                      :mag  (magn ref-img core)
+                                      :snr  snr
+                                      :core core
+                                      :sd   sd))
+                                  ))))
+                          ))))))
 
 ;; ---------------------------------------------------------------
 ;; Live history scanning - how to provide a list of detected and

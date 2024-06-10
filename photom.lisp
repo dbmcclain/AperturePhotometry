@@ -14,7 +14,7 @@
 (defvar *fits-segment-length* 2880)
 
 (defvar *fits-hdr*)
-(defvar *mag-offset*   #.(- 12.9f0 -9.76f0))
+(defvar *mag-offset*   #.(- 12.9f0 -9.76f0 0.1f0 -0.04f0 0.13f0))
 
 (defvar *fake-star*  nil)
 (defvar *fake-mag*   )
@@ -22,9 +22,10 @@
 (defvar *fake-stars* )
 (defvar *fake-img*   )
 
-(defvar *ring-radius*  11)
-(defvar *moat-radius*   7)
-(defvar *core-radius*   5)  ;; 3 for G channel images, 5 for DeBayered Green
+(defvar *ring-radius*   11)
+(defvar *moat-radius*    7)
+(defvar *core-radius*    2)  ;; intentional undersize to prevent overrun with noise
+(defvar *erasure-radius* 5)
 
 ;; --------------------------------------------
 
@@ -32,17 +33,19 @@
 (defvar *fake-star-130*  nil)
 
 (defun do-with-seestar (fn)
-  (let* ((*core-radius*   5)
-         (*mag-offset*    #.(- 12.9f0 -9.76f0))
+  (let* ((*core-radius*   2)
+         (*mag-offset*    #.(- 12.9f0 -9.76f0 0.1f0 -0.04f0 0.13f0))
          (*fake-star*     (or *fake-star-130*
-                              (setf *fake-star-130* (make-gaussian-fake-star :sigma 1.3)))))
+                              (let ((*core-radius* 5))
+                                (setf *fake-star-130* (make-gaussian-fake-star :sigma 1.3))))))
     (funcall fn)))
 
 (defun do-with-seestar-channel (fn)
   (let* ((*core-radius*   3)
          (*mag-offset*    #.(+ 9.4f0 (- 12.9f0 0.8617316f0))) ;; 9.4f0)
          (*fake-star*     (or *fake-star-75*
-                              (setf *fake-star-75* (make-gaussian-fake-star :sigma 0.75)))))
+                              (let ((*core-radius* 3))
+                                (setf *fake-star-75* (make-gaussian-fake-star :sigma 0.75))))))
     (funcall fn)))
 
 (defmacro with-seestar (&body body)
@@ -948,7 +951,7 @@ x 459.  y 219.
 (show-img 'test (img-slice *saved-img* 100 100 200))
 
 (with-seestar
-  (setf *saved-img* (with-seestar (photom))))
+  (setf *saved-img* (photom)))
 (defvar *sub* (img-slice *saved-img* 499 499 499))
 (measure-stars *sub* :thresh 5)
 (show-img 'img *saved-img* :binarize t)
@@ -956,6 +959,7 @@ x 459.  y 219.
 (show-img 'sub *sub* :binarize t)
 (show-img 'sub *sub* :binarize nil)
 (report-stars *sub*)
+(measure-stars *saved-img*)
 (report-stars *saved-img*)
 
  |#

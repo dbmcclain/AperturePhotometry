@@ -68,9 +68,7 @@
          (fake      (vm:outer-prod exps exps))
          (core-xtnt (1+ (* 2 *core-radius*)))
          ( (lf tp rt bt) (make-box-centered radius radius core-xtnt core-xtnt))
-         (flux      (loop for iy from tp below bt sum
-                            (loop for ix from lf below rt sum
-                                    (aref fake iy ix))))
+         (flux      (vm:total fake))
          (mag       (+ *mag-offset* (* -2.5f0 (log flux 10)))))
     `(,fake ,radius ,mag)))
 

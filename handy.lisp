@@ -137,10 +137,17 @@
 
 #|
 (plt:histogram 'plt
-               (loop repeat 10000 collect (poidev 110))
+               (loop repeat 10000 collect
+                       (poidev 11))
            :clear t
            )
 (plt:Fplot 'plt '(0 100) #'gammln :clear t)
-           
+
+(let ((med 11))
+  (plt:histogram 'plt
+                 (loop repeat 10000 collect
+                         (loop repeat 49 sum (- (poidev 11) med)))
+                 :clear t
+                 ))
  |#
          
