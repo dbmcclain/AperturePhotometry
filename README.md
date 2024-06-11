@@ -67,3 +67,17 @@ Yes, it probably is. And I should probably have a close look at its source code.
 But I now have the time to discover things for myself, and I thrive best in a highly interactive, extensible, programming environment like that offered by Common Lisp. I like to explore ideas right at the keyboard and see immediate results, or not. Lisp lets me do all of that. I love having Lisp Macrology at my fingertips, to bend the core language to my DSL needs. And I love having to think really hard about what the measurement process actually means. You don't get to do any of that if you just use _**DAOPHOT**_.
 
 This is very much an ongoing work in progress. Feel free to jump in there and try your own ideas!
+
+Updates 24-06-11
+---
+I found that the original algorithm for star finding would cause detection clusters around the skirts of very bright stars. So I then implemented a better peak finder that walks its way to the peak of the star image. But then I was missing the very brightest stars entirely !?
+
+Turns out I was detecting faint spillover from the brightest stars, and this would erase those peripheral areas for future searches to skip over. But then successive scans at the next y index would find another, and stamp out another region ahead of ourselves. By the time we reach the true connected peak of the bright star, it had been eroded by prior skirt finds.
+
+So now we proceed in threshold layers, from bright to faint. The basic threshold is 5σ (or whatever you specify). But we scan the image in stages, 100 basic thresh, 50 basic thresh, 25, 12, 6, and finally 1. That way we won't get confused by bright star spillover - we detect the core of the brightest stars first, then erode them from their true peak pixel outward. This works well.
+
+I also read Peter Stetson's original paper on DAOPHOT where he describes using matched filtering against a presumed Gaussian star profile. That's fine if you also want to discard non-stellar objects. But you are still left with the problem - how do you best find peaks? In his case, the peaks of the convolved image.
+
+But here we don't need to get so fancy. I want to measure everything above threshold that I can see. I don't really care if it is a star or a galaxy. And I also try to solve finding the peaks, which was glossed over in Peter's paper.
+
+
