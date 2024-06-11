@@ -78,6 +78,6 @@ So now we proceed in threshold layers, from bright to faint. The basic threshold
 
 I also read Peter Stetson's original paper on DAOPHOT where he describes using matched filtering against a presumed Gaussian star profile. That's fine if you also want to discard non-stellar objects. But you are still left with the problem - how do you best find peaks? In his case, the peaks of the convolved image.
 
-But here we don't need to get so fancy. I want to measure everything above threshold that I can see. I don't really care if it is a star or a galaxy. And I also try to solve finding the peaks, which was glossed over in Peter's paper.
+But here we don't need to get so fancy. I want to measure everything above threshold that I can see. I don't really care if it is a star or a galaxy. And I also try to solve the problem of finding the peaks, which was glossed over in Peter's paper.
 
 
