@@ -13,6 +13,17 @@
          args))
 
 (defun copy-array (arr &optional fn)
+  (let* ((arr2  (make-array (array-dimensions arr)
+                       :element-type (array-element-type arr)))
+         (vec  (vm:make-overlay-vector arr))
+         (vec2 (vm:make-overlay-vector arr2)))
+    (if fn
+        (map-into vec2 fn vec)
+      ;; else
+      (replace vec2 vec))
+    arr2))
+
+(defun copy-img-array (arr &optional fn)
   (let* ((arr2  (apply #'make-image-array (array-dimensions arr)))
          (vec  (vm:make-overlay-vector arr))
          (vec2 (vm:make-overlay-vector arr2)))
@@ -98,6 +109,12 @@
          (vdst (vm:make-overlay-vector ans)))
     (apply #'map-into vdst fn vs)
     ans))
+
+(defun map-array-into (dst fn arr &rest arrs)
+  (let* ((vs   (mapcar #'vm:make-overlay-vector (cons arr arrs)))
+         (vdst (vm:make-overlay-vector dst)))
+    (apply #'map-into vdst fn vs)
+    dst))
 
 (defun array-unop (arr fn)
   (map-array fn arr))

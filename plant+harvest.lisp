@@ -72,7 +72,7 @@
   (let+ (( (fake-star fake-radius fake-mag) fake-star)
          (fake-img (copy-img img))
          (fake-arr (setf (img-arr fake-img)
-                         (copy-array (img-arr img))))
+                         (copy-img-array (img-arr img))))
          (sf       (expt 10 (* -0.4f0 (- mag fake-mag)))))
     (print (list :sf sf))
     (dolist (star fake-star-positions)

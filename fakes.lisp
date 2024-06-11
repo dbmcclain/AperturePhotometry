@@ -96,5 +96,6 @@
   (show-fake-star (make-gaussian-fake-star :sigma 0.75)))
 (let ((*core-radius* 5))
   (show-fake-star (make-gaussian-fake-star :sigma 1.3)))
+(show-fake-star (img-fake-star *sub*))
  |#
 

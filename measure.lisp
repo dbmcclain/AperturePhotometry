@@ -64,72 +64,98 @@
 ;; ---------------------------------------------------------------
 ;; For manual checking
 #|
-(measure-location *sub* 694.  226.)
+(measure-location *saved-img* 676.  985.)
+
 |#
 
-(defun measure-location (img xc yc)
+(defun #1=measure-location (img x y &key (srch-radius 9))
   (let+ ((arr         (img-arr img))
+         (med         (img-med img))
+         (mad         (img-mad img))
+         (nsigma      (img-thr img))
          (core-radius (img-core img))
-         (core-width  (1+ (* 2 core-radius)))
-         (sub-arr     (extract-subarray arr (make-box-of-radius xc yc core-radius)))
-         (ht          (array-dimension sub-arr 0))
-         (row-sum     (let ((acc (copy-seq (array-row sub-arr 0))))
-                        (loop for row from 1 below ht do
-                                (map-into acc #'+ acc (array-row sub-arr row)))
-                        acc))
-         (ramp        (vm:framp ht))
-         (xcent       (round
-                       (+ xc (- core-radius)
-                          (/ (vm:total (map 'vector #'* ramp row-sum))
-                             (vm:total row-sum)))))
-         (col-sum     (let ((acc (array-col sub-arr 0)))
-                        (loop for col from 1 below ht do
-                                (map-into acc #'+ acc (array-col sub-arr col)))
-                        acc))
-         (ycent       (round
-                       (+ yc (- core-radius)
-                         (/ (vm:total (map 'vector #'* ramp col-sum))
-                            (vm:total col-sum))))))
-    (format t "~%Starting positon ~D,~D" xc yc)
-    (format t "~%Centroid position ~D,~D" xcent ycent)
-
-    (let+ ((med         (img-med img))
-           (mad         (img-mad img))
-           (thresh      (img-thr img)) ;; in SD units
-           (thr         (+ med (* (sd-to-mad thresh) mad))))
-      (if (< (aref arr ycent xcent) thr)
-          "Failed initial threshold"
-        ;; else
-        (if (not (cresting-p arr ycent xcent))
-            "Failed to crest"
-          ;; else
-          (let+ ((:mvb (med mad) (ring-med arr ycent xcent))
-                 (box  (make-box-of-radius xcent ycent core-radius))
-                 (core (- (sum-array arr box)
-                          (* med (box-area box)))))
-            (if (plusp core)
-                (let* ((poisson (sqrt core))
-                       (sd      (* +mad/sd+ mad core-width))
-                       (noise   (abs (complex sd poisson)))
-                       (snr     (/ core noise)))
-                  (if (>= snr thresh)
-                      (make-star
-                       :x    xcent
-                       :y    ycent
-                       :mag  (magn img core)
-                       :snr  snr
-                       :core core
-                       :sd   sd)
-                    ;; else
-                    "Failed second threshold on summed flux."
-                    ))
-              ;; else
-              "Summed Flux not positive."))
-          )))
-    ))
+         (thresh      (+ med (* mad (sd-to-mad nsigma))))
+         (srch-box    (make-box-of-radius x y srch-radius)))
+    (format t "~%Starting positon ~D, ~D" x y)
+    (loop for y from (box-top srch-box) below (box-bottom srch-box) do
+            (loop for x from (box-left srch-box) below (box-right srch-box) do
+                    (when (>= (aref arr y x) thresh)
+                      (return-from #1#
+                        (let+ ((:mvb (yc xc) (locate-peak arr srch-box y x))
+                               ( _       (format t "~%Peak position ~D, ~D" xc yc))
+                               (:mvb (med mad) (ring-med arr yc xc))
+                               (box  (make-box-of-radius xc yc core-radius))
+                               (core (- (sum-array arr box)
+                                        (* med (box-area box)))))
+                          (if (plusp core)
+                              (let* ((poisson (sqrt core))
+                                     (sd      (* +mad/sd+ mad (box-width box)))
+                                     (noise   (abs (complex sd poisson)))
+                                     (snr     (/ core noise)))
+                                (if (>= snr nsigma)
+                                    `(,(make-star
+                                        :x    xc
+                                        :y    yc
+                                        :mag  (magn img core)
+                                        :snr  snr
+                                        :core core
+                                        :sd   sd))
+                                  "Failed sum threshold"))
+                            "Failed core sum not positive")))
+                      )))
+    "Failed to find star"))
 
 ;; -------------------------------------------------------------------
 ;; Automated Star Detection and Measurement
+
+(defun locate-peak (arr box y x)
+  (let+ ((zstart   (aref arr y x))
+         (xp1      (1+ x)))
+    (if (and (< xp1 (box-right box))
+             (> (aref arr y xp1) zstart))
+        (locate-peak arr box y xp1)
+      (let ((xm1 (1- x)))
+        (if (and (>= xm1 (box-left box))
+                 (> (aref arr y xm1) zstart))
+            (locate-peak arr box y xm1)
+          (let ((yp1 (1+ y)))
+            (if (and (< yp1 (box-bottom box))
+                     (> (aref arr yp1 x) zstart))
+                (locate-peak arr box yp1 x)
+              (values y x)
+              ))
+          ))
+      )))
+
+(defun zap-peak (arr box y x thr)
+  (let ((repl  (/ thr 2)))
+    (labels ((zapx (y x)
+               (setf (aref arr y x) repl)
+               (loop for xx from (1+ x)
+                     while (and (< xx (box-right box))
+                                (>= (aref arr y xx) thr))
+                     do
+                       (setf (aref arr y xx) repl))
+               (loop for xx from (1- x) by -1
+                     while (and (>= xx (box-left box))
+                                (>= (aref arr y xx) thr))
+                     do
+                       (setf (aref arr y xx) repl)) )
+             
+             (zap (y x)
+               (zapx y x)
+               (loop for yy from (1+ y)
+                     while (and (< yy (box-bottom box))
+                                (>= (aref arr yy x) thr))
+                     do
+                       (zapx yy x))
+               (loop for yy from (1- y) by -1
+                     while (and (>= yy (box-top box))
+                                (>= (aref arr yy x) thr))
+                     do
+                       (zapx yy x))
+               ))
+      (zap y x))))
 
 (defun find-stars (ref-img &optional (thresh 5))
   ;; thresh in sigma units
@@ -138,34 +164,38 @@
          (core-width  (1+ (* 2 core-radius)))
          (med         (img-med ref-img))
          (mad         (img-mad ref-img))
-         (srch-arr    (copy-array ref-arr))
-         (thr         (+ med (* (sd-to-mad thresh) mad)))
+         (nsigma      thresh)
+         (srch-arr    (copy-img-array ref-arr))
+         (thr         (+ med (* (sd-to-mad nsigma) mad)))
          (ref-box     (inset-box (make-box-of-array ref-arr) *ring-radius* *ring-radius*)))
-    (loop for yc from (box-top ref-box) below (box-bottom ref-box) nconc
-            (loop for xc from (box-left ref-box) below (box-right ref-box) nconc
-                    (when (and (>= (aref srch-arr yc xc) thr)
-                               (cresting-p srch-arr yc xc))
-                      (let+ ((:mvb (med mad) (ring-med ref-arr yc xc))
-                             (box  (make-box-of-radius xc yc core-radius))
-                             (core (- (sum-array ref-arr box)
-                                      (* med (box-area box)))))
-                          (when (plusp core)
-                            (let* ((poisson (sqrt core))
-                                   (sd      (* +mad/sd+ mad core-width))
-                                   (noise   (abs (complex sd poisson)))
-                                   (snr     (/ core noise)))
-                              (when (>= snr thresh)
-                                (let ((erasure-box (make-box-of-radius xc yc *erasure-radius*)))
-                                  (fill-array srch-arr erasure-box med)
-                                  `(,(make-star
-                                      :x    xc
-                                      :y    yc
-                                      :mag  (magn ref-img core)
-                                      :snr  snr
-                                      :core core
-                                      :sd   sd))
-                                  ))))
-                          ))))))
+    (loop for mult in '(100 50 25 12 6 1) nconc
+            ;; peel off from bright to faint, to avoid chasing a
+            ;; target that is successively eroded before we reach
+            ;; it...
+            (loop for y from (box-top ref-box) below (box-bottom ref-box) nconc
+                    (loop for x from (box-left ref-box) below (box-right ref-box) nconc
+                            (when (>= (aref srch-arr y x) (* mult thr))
+                              (let+ ((:mvb (yc xc)   (locate-peak srch-arr ref-box y x))
+                                     (_              (zap-peak srch-arr ref-box yc xc thr))
+                                     (:mvb (med mad) (ring-med ref-arr yc xc))
+                                     (box  (make-box-of-radius xc yc core-radius))
+                                     (core (- (sum-array ref-arr box)
+                                              (* med (box-area box)))))
+                                (when (plusp core)
+                                  (let* ((poisson (sqrt core))
+                                         (sd      (* +mad/sd+ mad core-width))
+                                         (noise   (abs (complex sd poisson)))
+                                         (snr     (/ core noise)))
+                                    (when (>= snr nsigma)
+                                      `(,(make-star
+                                          :x    xc
+                                          :y    yc
+                                          :mag  (magn ref-img core)
+                                          :snr  snr
+                                          :core core
+                                          :sd   sd))
+                                      )))))
+                          )))))
 
 ;; ---------------------------------------------------------------
 ;; Live history scanning - how to provide a list of detected and
