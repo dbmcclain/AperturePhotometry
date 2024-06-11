@@ -80,4 +80,6 @@ I also read Peter Stetson's original paper on DAOPHOT where he describes using m
 
 But here we don't need to get so fancy. I want to measure everything above threshold that I can see. I don't really care if it is a star or a galaxy. And I also try to solve the problem of finding the peaks, which was glossed over in Peter's paper.
 
+But now... I relent. I see the virtue in using a Gaussian core + BG model. Least-squares solution for star amplitude is good. Does not work well on blown-out bright stars, but nothing else could do any better either. And now we are no longer "Aperture Photometry", but rather a fitted Photometry. 
 
+I decided to switch over because it was apparent that the brightest stars were leaving too much uncounted. It seemed that the aperture core size needed to adapt to how bright the star is. Using the Gaussian fitting is a kind of naturally adaptive solution. So I expanded the Gaussian to a 15x15 overall size, with σ adapted from estimated core sizes of stars. Noise contribution in the wings is not bad, since it is weighted by very low amplitude Gaussian wings at larger distances from the core. Conversely, had I done this expansion in Aperture Photometry, the noise would be killing us at larger distance from the core.
