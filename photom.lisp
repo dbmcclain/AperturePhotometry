@@ -14,7 +14,7 @@
 (defvar *fits-segment-length* 2880)
 
 (defvar *fits-hdr*)
-(defvar *mag-offset*   #.(- 12.9f0 -9.76f0 0.1f0 -0.04f0 0.13f0))
+(defvar *mag-offset*   #.(+ 21.18 (- 12.9 12.0) (- 12.9 14.96)))
 
 (defvar *fake-star*  nil)
 (defvar *fake-mag*   )
@@ -34,9 +34,9 @@
 
 (defun do-with-seestar (fn)
   (let* ((*core-radius*   2)
-         (*mag-offset*    #.(+ 21.18 (- 12.9 12.0)))
+         (*mag-offset*    #.(+ 21.18 (- 12.9 12.0) (- 12.9 14.96)))
          (*fake-star*     (or *fake-star-130*
-                              (let ((*core-radius* 5))
+                              (let ((*core-radius* 7))
                                 (setf *fake-star-130* (make-gaussian-fake-star :sigma 1.3))))))
     (funcall fn)))
 
@@ -64,7 +64,7 @@
   (fake-star *fake-star*))
 
 (defstruct star
-  x y mag snr core sd)
+  x y mag snr core bg sd)
 
 
 (defun do-with-img (img fn)
@@ -449,7 +449,7 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
   (plt:fplot 'plt '(0 100) (lambda (x) (* 5 (abs (complex (sqrt x) 7.5)))) :color :red))
 
 (with-seestar
-  (let* ((mad      9)
+  (let* ((mad      7)
          (nf-sigma (* mad +mad/sd+ (1+ (* 2 *core-radius*)))))
     (labels ((inv-mag (x)
                (expt 10.0 (* -0.4 (- x *mag-offset*))))
@@ -807,9 +807,9 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
               :clear t
               :symbol :cross)
 
-    (format t "~%Count  Star Pos       Mag     SNR  CoreSum  RingSD")
+    (format t "~%Count  Star Pos       Mag   SNR    CoreSum     BG    SD")
     (format t "~%         X    Y")
-    (format t "~%--------------------------------------------------")
+    (format t "~%---------------------------------------------------------")
     (loop for star in (sort (img-stars img) #'< :key sort-key)
           for ct from 1
           do
@@ -818,11 +818,12 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
                              (mag star-mag)
                              (snr star-snr)
                              (core star-core)
+                             (bg   star-bg)
                              (sd   star-sd)) star
-              (format t "~%~3D   ~4D ~4D    ~6,2F  ~6,1F  ~7D  ~6,1F"
+              (format t "~%~3D   ~4D ~4D    ~6,2F  ~6,1F  ~7D  ~5D  ~6,1F"
                       ;; crude mag adj based on 3c273
                       ct x y mag (float snr 1.0)
-                      (round core) sd)
+                      (round core) (round bg) sd)
               ))))
 
 #|

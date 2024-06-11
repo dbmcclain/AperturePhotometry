@@ -64,17 +64,16 @@
 ;; ---------------------------------------------------------------
 ;; For manual checking
 #|
-(measure-location *saved-img* 676.  985.)
+(measure-location *saved-img* 426.  812.)
 
 |#
 
 (defun #1=measure-location (img x y &key (srch-radius 9))
-  (let+ ((arr         (img-arr img))
+  (let+ ((:mvb (krnl s0sq) (prep-kernel img))
+         (arr         (img-arr img))
          (med         (img-med img))
-         (mad         (img-mad img))
          (nsigma      (img-thr img))
-         (core-radius (img-core img))
-         (thresh      (+ med (* mad (sd-to-mad nsigma))))
+         (thresh      (+ med (* nsigma (sqrt s0sq))))
          (srch-box    (make-box-of-radius x y srch-radius)))
     (format t "~%Starting positon ~D, ~D" x y)
     (loop for y from (box-top srch-box) below (box-bottom srch-box) do
@@ -83,23 +82,19 @@
                       (return-from #1#
                         (let+ ((:mvb (yc xc) (locate-peak arr srch-box y x))
                                ( _       (format t "~%Peak position ~D, ~D" xc yc))
-                               (:mvb (med mad) (ring-med arr yc xc))
-                               (box  (make-box-of-radius xc yc core-radius))
-                               (core (- (sum-array arr box)
-                                        (* med (box-area box)))))
-                          (if (plusp core)
-                              (let* ((poisson (sqrt core))
-                                     (sd      (* +mad/sd+ mad (box-width box)))
-                                     (noise   (abs (complex sd poisson)))
-                                     (snr     (/ core noise)))
+                               (:mvb (ampl bg) (measure-flux arr yc xc krnl)))
+                          (if (plusp ampl)
+                              (let+ ((tnoise (sqrt (+ ampl s0sq)))
+                                     (snr    (/ ampl tnoise)))
                                 (if (>= snr nsigma)
                                     `(,(make-star
                                         :x    xc
                                         :y    yc
-                                        :mag  (magn img core)
+                                        :mag  (magn img ampl)
                                         :snr  snr
-                                        :core core
-                                        :sd   sd))
+                                        :core ampl
+                                        :bg   (- bg med)
+                                        :sd   tnoise))
                                   "Failed sum threshold"))
                             "Failed core sum not positive")))
                       )))
@@ -157,6 +152,30 @@
                ))
       (zap y x))))
 
+;; ---------------------------------------------------------
+
+#|
+(defun measure-aperture-flux (arr y x core-radius)
+  (let+ ((box  (make-box-of-radius xc yc core-radius))
+         (core (- (sum-array ref-arr box)
+                  (* med (box-area box)))))
+    (when (plusp core)
+      (let* ((poisson (sqrt core))
+             (sd      (* +mad/sd+ mad core-width))
+             (noise   (abs (complex sd poisson)))
+             (snr     (/ core noise)))
+        (when (>= snr nsigma)
+          `(,(make-star
+              :x    xc
+              :y    yc
+              :mag  (magn ref-img core)
+              :snr  snr
+              :core core
+              :sd   sd))
+          )))))
+|#
+
+#|
 (defun find-stars (ref-img &optional (thresh 5))
   ;; thresh in sigma units
   (let+ ((ref-arr     (img-arr ref-img))
@@ -194,6 +213,79 @@
                                           :snr  snr
                                           :core core
                                           :sd   sd))
+                                      )))))
+                          )))))
+|#
+;; --------------------------------------------------------------------
+;; Least-squares fitting to Gaussian core + BG
+;;
+;;   I(i,j) = A*G(i,j; σ) + B
+;;
+;;   Δ = N * Σ[G(i,j; σ)^2] - (Σ[G(i,j;σ)])^2
+;;   A = (N * Σ[I(i,j)*G(i,j;σ)] - Σ[G(i,j;σ)] * Σ[I(i,j)])/Δ
+;;   B = (Σ[G(i,h;σ)^2] * Σ[I(i,j)] - Σ[G(i,j;σ)] * Σ[I(i,j)*G(i,j;σ)])/Δ
+;; 
+(defun measure-flux (arr y x prof)
+  ;; Least squares fit of star core to Gaussian profile
+  ;; return estimated amplitude and bg.
+  (let+ (( (krnl Δ npix ksum k2sum) prof)
+         (box    (make-box-of-radius x y (truncate (array-dimension krnl 0) 2)))
+         (star   (extract-subarray arr box))
+         (ssum   (vm:total star))
+         (kssum  (vm:total (map-array #'* krnl star)))
+         (ampl   (/ (- (* npix kssum)
+                       (* ksum ssum))
+                    Δ))
+         (bg     (/ (- (* k2sum ssum)
+                       (* ksum kssum))
+                    Δ)))
+    (values ampl bg)
+    ))
+
+(defun prep-kernel (ref-img)
+  (let+ ((fake-star   (first (img-fake-star ref-img)))
+         (mad         (img-mad ref-img))
+         (ksum        (vm:total fake-star))
+         (k2sum       (vm:total (map-array #'* fake-star fake-star)))
+         (npix        (array-total-size fake-star))
+         (Δ           (- (* npix k2sum)
+                         (sqr ksum)))
+         (prof        `(,fake-star ,Δ ,npix ,ksum ,k2sum))
+         (sd          (* mad +mad/sd+))
+         (s0sq        (/ (* npix sd sd) Δ)))
+    (values prof s0sq)))
+  
+(defun find-stars (ref-img &optional (thresh 5))
+  ;; thresh in sigma units
+  (let+ ((ref-arr     (img-arr ref-img))
+         (:mvb (krnl s0sq)  (prep-kernel ref-img))
+         (med         (img-med ref-img))
+         (nsigma      thresh)
+         (thr         (coerce (+ med (* nsigma (sqrt s0sq))) 'single-float))
+         (srch-arr    (copy-img-array ref-arr))
+         (ref-box     (inset-box (make-box-of-array ref-arr) *ring-radius* *ring-radius*)))
+    (loop for mult in '(200 100 50 25 12 6 1) nconc
+            ;; peel off from bright to faint, to avoid chasing a
+            ;; target that is successively eroded before we reach
+            ;; it...
+            (loop for y from (box-top ref-box) below (box-bottom ref-box) nconc
+                    (loop for x from (box-left ref-box) below (box-right ref-box) nconc
+                            (when (>= (aref srch-arr y x) (* mult thr))
+                              (let+ ((:mvb (yc xc)   (locate-peak srch-arr ref-box y x))
+                                     (_              (zap-peak srch-arr ref-box yc xc thr))
+                                     (:mvb (ampl bg) (measure-flux ref-arr yc xc krnl)))
+                                (when (plusp ampl)
+                                  (let+ ((tnoise (sqrt (+ ampl s0sq)))
+                                         (snr    (/ ampl tnoise)))
+                                    (when (>= snr nsigma)
+                                      `(,(make-star
+                                          :x    xc
+                                          :y    yc
+                                          :mag  (magn ref-img ampl)
+                                          :snr  snr
+                                          :core ampl
+                                          :bg   (- bg med)
+                                          :sd   tnoise))
                                       )))))
                           )))))
 
