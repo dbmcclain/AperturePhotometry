@@ -468,13 +468,13 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
   (plt:fplot 'plt '(0 100) (lambda (x) (* 5 (abs (complex (sqrt x) 7.5)))) :color :red))
 
 (with-seestar
-  (let* ((mad      7)
+  (let* ((mad      11)
          (nf-sigma (* mad +mad/sd+ (1+ (* 2 *core-radius*)))))
     (labels ((inv-mag (x)
                (expt 10.0 (* -0.4 (- x *mag-offset*))))
              (nf (x)
                (* 5 (abs (complex (sqrt (inv-mag x)) nf-sigma)))))
-      (plt:fplot 'plt2 '(6 20) (lambda (x) (/ (inv-mag x) (nf x) 0.2))
+      (plt:fplot 'plt2 '(8 17) (lambda (x) (/ (inv-mag x) (nf x) 0.2))
                  :clear t
                  :thick 2
                  :ylog  t
@@ -830,6 +830,7 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
               :xtitle "Magnitude [mag]"
               :ytitle "Star SD [σ]"
               :symbol :cross)
+    
     (phot-limit img)
     (plt:plot 'phot-limit (mapcar #'star-mag stars)
               (mapcar #'star-snr stars)
@@ -975,20 +976,24 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
   (let* ((nf-sigma (sqrt (img-s0sq img))))
     (labels ((inv-mag (x)
                (expt 10.0 (* -0.4 (- x (img-mag-off img)))))
-             (nf (flux)
-               (abs (complex (sqrt flux) nf-sigma)))
-             (snr (mag)
+             (nf (flux nf)
+               (abs (complex (sqrt flux) nf)))
+             (snr (mag nf)
                (let ((flux (inv-mag mag)))
-                 (/ flux (nf flux)))))
-      (plt:fplot 'phot-limit '(6 20) #'snr
+                 (/ flux (nf flux nf)))))
+      (plt:fplot 'phot-limit '(7 18) (um:rcurry #'snr 0)
                  :clear t
-                 :thick 2
+                 :thick 1
                  :ylog  t
+                 :color :blue
                  :title "SNR vs Magnitude"
                  :xtitle "Star Magnitude [mag]"
                  :ytitle "SNR [σ]"
+                 :legend "No Noise")
+      (plt:fplot 'phot-limit '(7 18) (um:rcurry #'snr nf-sigma)
+                 :thick 2
                  :legend (format nil "Noise Floor 1σ = ~4,1Fdu" nf-sigma))
-      (plt:plot 'phot-limit '(6 20) '(5 5)
+      (plt:plot 'phot-limit '(7 18) '(5 5)
                 :color :gray50
                 :thick 3
                 :legend "5σ Limit")
