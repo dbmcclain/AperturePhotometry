@@ -75,8 +75,9 @@
     vec))
 
 (defun extract-subarray (arr box)
-  (let+ ((dst-arr (make-image-array (- (box-bottom box) (box-top box))
-                                    (- (box-right box)  (box-left box)))))
+  (let+ ((dst-arr (make-array `(,(- (box-bottom box) (box-top box))
+                                ,(- (box-right box)  (box-left box)))
+                              :element-type (array-element-type arr))))
     (loop for src-row from (box-top box) below (box-bottom box)
           for dst-row from 0
           do

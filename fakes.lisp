@@ -1,6 +1,7 @@
 
 (in-package :com.ral.photometry)
 
+#|
 (defun gen-fake-star (img &optional (magsel #'identity))
   (let ((imgstk  (make-image-array 19 19
                                    :initial-element 0.0f0))
@@ -47,7 +48,7 @@
         (print (list :stack-mag mag :count ct))
         (setf *fake-star* `(,imgstk 9 ,mag)))
       ))
-
+|#
 #|
 (gen-fake-star *sub* (lambda (snr) (< 50 snr 150)))
 (show-fake-star *fake-star*)
@@ -61,10 +62,10 @@
     (exp (* -0.5f0 (sqr z)))
     ))
 
-(defun make-gaussian-fake-star (&key (sigma 0.75) (radius *core-radius*))
+(defun make-gaussian-fake-star (&key (sigma 0.75f0) (radius *core-radius*))
   (let+ ((xtnt      (1+ (* 2 radius)))
          (xs        (vops:voffset (- radius) (vm:framp xtnt)))
-         (exps      (map 'vector (um:rcurry #'gaussian sigma) xs))
+         (exps      (map 'vector (um:rcurry #'gaussian (coerce sigma 'single-float)) xs))
          (arr       (vm:outer-prod exps exps))
          (box       (make-box-of-array arr))
          (ksum      (vm:total arr))

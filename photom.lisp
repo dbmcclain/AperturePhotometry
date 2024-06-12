@@ -14,7 +14,12 @@
 (defvar *fits-segment-length* 2880)
 
 (defvar *fits-hdr*)
-(defvar *mag-offset*   #.(+ 21.18 (- 12.9 12.0) (- 12.9 14.96)))
+(defvar *mag-offset*   #.(+ 21.18
+                            (- 12.9 12.0)
+                            (- 12.9 14.96)
+                            (- 12.9 13.27)
+                            (- 12.9 12.99)
+                            ))
 
 (defvar *fake-star*  nil)
 (defvar *fake-mag*   )
@@ -34,7 +39,12 @@
 
 (defun do-with-seestar (fn)
   (let* ((*core-radius*   2)
-         (*mag-offset*    #.(+ 21.18 (- 12.9 12.0) (- 12.9 14.96)))
+         (*mag-offset*    #.(+ 21.18
+                            (- 12.9 12.0)
+                            (- 12.9 14.96)
+                            (- 12.9 13.27)
+                            (- 12.9 12.99)
+                            ))
          (*fake-star*     (or *fake-star-130*
                               (let ((*core-radius* 7))
                                 (setf *fake-star-130* (make-gaussian-fake-star :sigma 1.3))))))
@@ -457,7 +467,7 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
   (plt:fplot 'plt '(0 100) (lambda (x) (* 5 (abs (complex (sqrt x) 7.5)))) :color :red))
 
 (with-seestar
-  (let* ((mad      5)
+  (let* ((mad      7)
          (nf-sigma (* mad +mad/sd+ (1+ (* 2 *core-radius*)))))
     (labels ((inv-mag (x)
                (expt 10.0 (* -0.4 (- x *mag-offset*))))
@@ -475,11 +485,12 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
                 :color :gray50
                 :thick 3
                 :legend "5σ Limit")
-                 
+      #|
       (plt:fplot 'plt '(6 20) #'inv-mag
                  :ylog t
                  :clear t)
       (plt:fplot 'plt '(0 100) #'nf :color :red)
+      |#
       )))
 
 ;; ----------------------------------------------------
@@ -915,8 +926,8 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
           (img-stars new-img) nil)
     new-img))
         
-(defun show-sub-dets (img xc yc)
-  (let* ((sub-img (img-slice img xc yc (img-core img)))
+(defun show-sub-dets (img xc yc &optional (radius (img-core img)))
+  (let* ((sub-img (img-slice img xc yc radius))
          (arr     (img-arr sub-img))
          (box     (make-box-of-array arr)))
     (loop for row from (box-top box) below (box-bottom box) do
@@ -944,6 +955,29 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
     #||#
     ))
             
+(defun phot-limit (img)
+  (let* ((nf-sigma (sqrt (img-s0sq img))))
+    (labels ((inv-mag (x)
+               (expt 10.0 (* -0.4 (- x (img-mag-off img)))))
+             (nf (flux)
+               (abs (complex (sqrt flux) nf-sigma)))
+             (snr (mag)
+               (let ((flux (inv-mag mag)))
+                 (/ flux (nf flux)))))
+      (plt:fplot 'plt2 '(6 20) #'snr
+                 :clear t
+                 :thick 2
+                 :ylog  t
+                 :title "SNR vs Magnitude"
+                 :xtitle "Star Magnitude [mag]"
+                 :ytitle "SNR [σ]"
+                 :legend (format nil "Noise Floor 1σ = ~4,1Fdu" nf-sigma))
+      (plt:plot 'plt2 '(6 20) '(5 5)
+                :color :gray50
+                :thick 3
+                :legend "5σ Limit")
+      )))
+
 #|
 (loop for iy 0 below 4 do
         (loop for ix from 0 below 4 do
@@ -954,7 +988,7 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
 
 (sub-image 297 417)
 
-(show-sub-dets *sub* 458 220)
+(show-sub-dets *sub* 398 392 4)
 x 459.  y 219.
 
 
@@ -966,7 +1000,7 @@ x 459.  y 219.
 (with-seestar
   (setf *saved-img* (photom)))
 (defvar *sub*)
-(setf *sub* (img-slice *saved-img* 520.  945. 400))
+(setf *sub* (img-slice *saved-img* 681 829 400))
 (measure-stars *sub* :thresh 5)
 (show-img 'img *saved-img* :binarize t)
 (show-img 'img *saved-img* :binarize nil)
@@ -975,7 +1009,8 @@ x 459.  y 219.
 (report-stars *sub*)
 (measure-stars *saved-img*)
 (report-stars *saved-img*)
-
+(phot-limit *saved-img*)
+(phot-limit *sub*)
  |#
 #|
  ;; maybe use 2D-FFT's for fast bulk filtering of some sort?
@@ -1042,7 +1077,8 @@ x 459.  y 219.
          (wdx (um:ceiling-pwr2 wd))
          (htx (um:ceiling-pwr2 ht))
          (wrk-arr (make-image-array htx wdx :initial-element med))
-         (fake (copy-img-array (car (img-fake-star *sub*)) (um:rcurry #'coerce 'single-float)))
+         (prof (img-fake-star *sub*))
+         (fake (copy-img-array (fake-krnl prof) (um:rcurry #'coerce 'single-float)))
          ( (htf wdf) (array-dimensions fake))
          (mnf  (vm:mean fake))
          (gsq  (array*a fake fake))
@@ -1052,9 +1088,7 @@ x 459.  y 219.
                             (/ (- x mnf) norm))
                           fake))
          (krnl-arr (make-image-array htx wdx :initial-element 0f0)))
-    (implant-subarray wrk-arr arr 
-                      (truncate (- htx ht) 2)
-                      (truncate (- wdx wd) 2))
+    (implant-subarray wrk-arr arr 0 0)
     (implant-subarray krnl-arr krnl
                       (truncate (- htx htf) 2)
                       (truncate (- wdx wdf) 2))

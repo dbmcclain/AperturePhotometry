@@ -25,102 +25,143 @@
 
 |#
 
-(defun #1=measure-location (img x y &key (srch-radius 9))
-  (let+ ((krnl        (img-fake-star img))
-         (s0sq        (img-s0sq img))
-         (arr         (img-arr img))
-         (med         (img-med img))
-         (nsigma      (img-thr img))
-         (thresh      (+ med (* nsigma (sqrt s0sq))))
-         (srch-box    (make-box-of-radius x y srch-radius)))
+(defun quick-locate-peak (arr box)
+  (let+ ((sub  (extract-subarray arr box))
+         (vec  (vm:make-overlay-vector sub))
+         (maxv (reduce #'max vec))
+         (pos  (position-if (um:rcurry #'>= maxv) vec))
+         (wd   (box-width box))
+         (xoff (mod pos wd))
+         (yoff (truncate pos wd)))
+    (values (+ yoff (box-top box))
+            (+ xoff (box-left box)))
+    ))
+         
+(defun #1=measure-location (img x y &key (srch-radius 4))
+  (let+ ((krnl         (img-fake-star img))
+         (s0sq         (img-s0sq img))
+         (arr          (img-arr img))
+         (med          (img-med img))
+         (mad          (img-mad img))
+         (nsigma       (img-thr img))
+         (sd           (* mad +mad/sd+))
+         (thresh       (+ med (* nsigma sd)))
+         (srch-box     (make-box-of-radius x y srch-radius))
+         (:mvb (yc xc) (quick-locate-peak arr srch-box))
+         (:mvb (ampl bg) (measure-flux arr yc xc krnl)))
     (format t "~%Starting positon ~D, ~D" x y)
-    (loop for y from (box-top srch-box) below (box-bottom srch-box) do
-            (loop for x from (box-left srch-box) below (box-right srch-box) do
-                    (when (>= (aref arr y x) thresh)
-                      (return-from #1#
-                        (let+ ((:mvb (yc xc) (locate-peak arr srch-box y x))
-                               ( _       (format t "~%Peak position ~D, ~D" xc yc))
-                               (:mvb (ampl bg) (measure-flux arr yc xc krnl)))
-                          (if (plusp ampl)
-                              (let+ ((tnoise (sqrt (+ ampl s0sq)))
-                                     (snr    (/ ampl tnoise)))
-                                (if (>= snr nsigma)
-                                    `(,(make-star
-                                        :x    xc
-                                        :y    yc
-                                        :mag  (magn img ampl)
-                                        :snr  snr
-                                        :core ampl
-                                        :bg   (- bg med)
-                                        :sd   tnoise))
-                                  (format nil "Failed: Sum below threshold: Mag ≈ ~4,1F  SNR ≈ ~3,1F"
-                                          (magn img ampl) snr)))
-                            (format nil "Failed: Fitted amplitude not positive, central peak ≈ ~4,1F mag"
-                                    (magn img (- (aref arr yc xc) med)))
-                            )))
-                      )))
-    "Failed: Could not find the star"))
+    (format t "~%Thresh = ~6,1F" thresh)
+    (format t "~%Peak position ~D, ~D" xc yc)
+    (format t "~%Peak value ~F" (aref arr yc xc))
+    (when (> (aref arr yc xc) 65000)
+      (format t "~%!! Star likely blown !!"))
+    (if (plusp ampl)
+        (let+ ((tnoise (sqrt (+ ampl s0sq)))
+               (snr    (/ ampl tnoise)))
+          (if (>= snr nsigma)
+              (print (make-star
+                      :x    xc
+                      :y    yc
+                      :mag  (magn img ampl)
+                      :snr  snr
+                      :core ampl
+                      :bg   (- bg med)
+                      :sd   tnoise))
+            (format t "~%Failed: Sum below threshold: Mag ≈ ~4,1F  SNR ≈ ~3,1F"
+                    (magn img ampl) snr)))
+      (format t "~%Failed: Fitted amplitude not positive, central peak ≈ ~4,1F mag"
+              (magn img (- (aref arr yc xc) med)))
+      )))
 
 ;; -------------------------------------------------------------------
 ;; Automated Star Detection and Measurement
 
-(defun locate-peak (arr box y x)
+(defstruct (masked-array
+            (:constructor %make-masked-array (arr mask)))
+  arr mask)
+
+(defun make-masked-array (arr &optional box)
+  (let ((bits (make-array (array-dimensions arr)
+                          :element-type 'bit
+                          :initial-element 1)))
+    (when box
+      (loop for iy from 0 below (box-top box) do
+            (let ((vec (array-row bits iy)))
+              (fill vec 0)))
+      (loop for iy from (box-bottom box) below (array-dimension bits 0) do
+              (let ((vec (array-row bits iy)))
+                (fill vec 0)))
+      (loop for iy from (box-top box) below (box-bottom box) do
+            (let ((vec (array-row bits iy)))
+              (fill vec 0 :end (box-left box))
+              (fill vec 0 :start (box-right box)))))
+    (%make-masked-array arr bits)
+    ))
+
+(defun bref (arr iy ix)
+  (if (and
+       (array-in-bounds-p (masked-array-arr arr) iy ix)
+       (= 1 (aref (masked-array-mask arr) iy ix)))
+      (aref (masked-array-arr  arr) iy ix)
+    0f0))
+
+(defun set-mask (arr iy ix &optional (val 1))
+  (setf (aref (masked-array-mask arr) iy ix) val))
+
+(defun clr-mask (arr iy ix)
+  (set-mask arr iy ix 0))
+
+;; --------------------------------------------
+
+(defun locate-peak (arr y x)
   ;; Starting from X, Y, march to the peak of the star image. Since we
   ;; scan images from Left to right, top to bottom, there is no point
   ;; looking behind us in Y. Anything there would have already been zapped away.
   ;;
-  (let+ ((zstart   (aref arr y x))
+  (let+ ((zstart   (bref arr y x))
          (xp1      (1+ x)))
-    (if (and (< xp1 (box-right box))
-             (> (aref arr y xp1) zstart))
-        (locate-peak arr box y xp1)
+    (if (> (bref arr y xp1) zstart)
+        (locate-peak arr y xp1)
       (let ((xm1 (1- x)))
-        (if (and (>= xm1 (box-left box))
-                 (> (aref arr y xm1) zstart))
-            (locate-peak arr box y xm1)
+        (if (> (bref arr y xm1) zstart)
+            (locate-peak arr y xm1)
           (let ((yp1 (1+ y)))
-            (if (and (< yp1 (box-bottom box))
-                     (> (aref arr yp1 x) zstart))
-                (locate-peak arr box yp1 x)
+            (if (> (bref arr yp1 x) zstart)
+                (locate-peak arr yp1 x)
               (values y x)
               ))
           ))
       )))
 
-(defun zap-peak (arr box y x thr)
+(defun zap-peak (arr y x thr)
   ;; Set all pixels in the star image to something below detection
   ;; threshold. A pixel belongs to the star if it can be reached from
   ;; a linear march in Y, and breadth sweeps in X. Spiral patterns
   ;; will not be taken out this way.
   ;;
-  (let ((repl  (/ thr 2)))
-    (labels ((zapx (y x)
-               (setf (aref arr y x) repl)
-               (loop for xx from (1+ x)
-                     while (and (< xx (box-right box))
-                                (>= (aref arr y xx) thr))
-                     do
-                       (setf (aref arr y xx) repl))
-               (loop for xx from (1- x) by -1
-                     while (and (>= xx (box-left box))
-                                (>= (aref arr y xx) thr))
-                     do
-                       (setf (aref arr y xx) repl)) )
-             
-             (zap (y x)
-               (zapx y x)
-               (loop for yy from (1+ y)
-                     while (and (< yy (box-bottom box))
-                                (>= (aref arr yy x) thr))
-                     do
-                       (zapx yy x))
-               (loop for yy from (1- y) by -1
-                     while (and (>= yy (box-top box))
-                                (>= (aref arr yy x) thr))
-                     do
-                       (zapx yy x))
+  (labels ((zapx (y x)
+             (clr-mask arr y x)
+             (loop for xx from (1+ x)
+                   while (>= (bref arr y xx) thr)
+                   do
+                     (clr-mask arr y xx))
+             (loop for xx from (1- x) by -1
+                   while (>= (bref arr y xx) thr)
+                   do
+                     (clr-mask arr y xx)))
+           
+           (zap (y x)
+             (zapx y x)
+             (loop for yy from (1+ y)
+                   while (>= (bref arr yy x) thr)
+                   do
+                     (zapx yy x))
+             (loop for yy from (1- y) by -1
+                   while (>= (bref arr yy x) thr)
+                   do
+                     (zapx yy x))
                ))
-      (zap y x))))
+      (zap y x)))
 
 ;; ---------------------------------------------------------
 ;; Aperture Photometry
@@ -184,9 +225,9 @@
          (med         (img-med ref-img))
          (mad         (img-mad ref-img))
          (nsigma      thresh)
-         (srch-arr    (copy-img-array ref-arr))
          (thr         (+ med (* (sd-to-mad nsigma) mad)))
-         (ref-box     (inset-box (make-box-of-array ref-arr) *ring-radius* *ring-radius*)))
+         (ref-box     (inset-box (make-box-of-array ref-arr) *ring-radius* *ring-radius*))
+         (srch-arr    (make-masked-array ref-arr ref-box)))
     (loop for mult in '(100 50 25 12 6 1) nconc
             ;; peel off from bright to faint, to avoid chasing a
             ;; target that is successively eroded before we reach
@@ -224,15 +265,28 @@
 ;;
 ;;   I(i,j) = A*G(i,j; σ) + B
 ;;
-;;   Δ = N * Σ[G(i,j; σ)^2] - (Σ[G(i,j;σ)])^2
-;;   A = (N * Σ[I(i,j)*G(i,j;σ)] - Σ[G(i,j;σ)] * Σ[I(i,j)])/Δ
-;;   B = (Σ[G(i,h;σ)^2] * Σ[I(i,j)] - Σ[G(i,j;σ)] * Σ[I(i,j)*G(i,j;σ)])/Δ
-;; 
+;;   Δ = N * Σ[G(i,j; σ)^2] - (Σ[G(i,j;σ)])^2                             = N G^2_ii - G_ii^2 > 0
+;;   A = (N * Σ[I(i,j)*G(i,j;σ)] - Σ[G(i,j;σ)] * Σ[I(i,j)])/Δ             = (N I_ij G_ji - G_ii I_ii)/Δ 
+;;   B = (Σ[G(i,h;σ)^2] * Σ[I(i,j)] - Σ[G(i,j;σ)] * Σ[I(i,j)*G(i,j;σ)])/Δ = (G^2_ii I_jj - G_kk G_ij I_ij)/Δ
+;;
+;;   Noise Variance in star-free region, given SD for image: (= 1.4826 * MAD)
+;;
+;;      S0^2_meas = N SD^2 / Δ
+;;
+;;   Total Variance of measured star:
+;;
+;;     S*^2_meas = A + N SD^2 / Δ
+;;
+;;   SNR of star meas:
+;;
+;;     SNR = A / Sqrt(S*^2_meas)
+;;
 (defun measure-flux (arr y x prof)
   ;; Least squares fit of star core to Gaussian profile
   ;; return estimated amplitude and bg.
   ;;
   ;; Unit Delta function at center measures: A = (N - ksum)/Δ < 1, B = (k2sum-ksum)/Δ < 0.
+  ;; Unit Tophat at location measures      : A = 0, B = 1
   ;; Gaussian kernel at location measures  : A = 1, B = 0 => engr mag = 0.
   ;;
   (with-accessors ((krnl   fake-krnl)
@@ -293,32 +347,38 @@
          (s0sq        (/ (* npix sd sd) Δ))) ;; expected noise from a star-free field.
     (values prof s0sq)))
 |#
-
+#|
 (defun find-stars (ref-img &optional (thresh 5))
   ;; thresh in sigma units
   ;; Find and measure stars in the image.
   (let+ ((ref-arr     (img-arr ref-img))
          (krnl        (img-fake-star ref-img))
          (s0sq        (img-s0sq ref-img))
-         (med         (img-med ref-img))
          (nsigma      thresh)
-         (thr         (coerce (+ med (* nsigma (sqrt s0sq))) 'single-float))
-         (srch-arr    (copy-img-array ref-arr))
-         (ref-box     (inset-box (make-box-of-array ref-arr) *ring-radius* *ring-radius*)))
-    (loop for mult in '(200 100 50 25 12 6 1) nconc
+         (med         (img-med ref-img))
+         (mad         (img-mad ref-img))
+         (sd          (* mad +mad/sd+))
+         (thr         (+ med (* nsigma sd)))
+         (ring-radius (fake-radius krnl))
+         (srch-box    (inset-box (make-box-of-array ref-arr) ring-radius ring-radius))
+         (srch-arr    (make-masked-array ref-arr srch-box)))
+    (loop for mult in '(200 100 50 25 12 6 1)
+          for mult-thr = (* mult thr)
+          nconc
             ;; peel off from bright to faint, to avoid chasing a
             ;; target that is successively eroded before we reach
             ;; it...
-            (loop for y from (box-top ref-box) below (box-bottom ref-box) nconc
-                    (loop for x from (box-left ref-box) below (box-right ref-box) nconc
-                            (when (>= (aref srch-arr y x) (* mult thr))
-                              (let+ ((:mvb (yc xc)   (locate-peak srch-arr ref-box y x))
-                                     (_              (zap-peak srch-arr ref-box yc xc thr))
+            (loop for y from (box-top srch-box) below (box-bottom srch-box) nconc
+                    (loop for x from (box-left srch-box) below (box-right srch-box) nconc
+                            (when (>= (bref srch-arr y x) mult-thr)
+                              (let+ ((:mvb (yc xc)   (locate-peak srch-arr y x))
+                                     ;; (_              (zap-peak srch-arr yc xc thr))
                                      (:mvb (ampl bg) (measure-flux ref-arr yc xc krnl)))
                                 (when (plusp ampl)
                                   (let+ ((tnoise (sqrt (+ ampl s0sq)))
                                          (snr    (/ ampl tnoise)))
                                     (when (>= snr nsigma)
+                                      (zap-peak srch-arr yc xc thr)
                                       `(,(make-star
                                           :x    xc
                                           :y    yc
@@ -329,7 +389,101 @@
                                           :sd   tnoise))
                                       )))))
                           )))))
+|#
 
+(defun find-stars (ref-img &optional (thresh 5))
+  ;; thresh in sigma units
+  ;; Find and measure stars in the image.
+  (let+ (;; (ref-arr     (img-arr ref-img))
+         (krnl        (img-fake-star ref-img))
+         (s0sq        (img-s0sq ref-img))
+         (nsigma      thresh)
+         (med         (img-med ref-img))
+         (harr        (make-himg ref-img))
+         (thr         (coerce (* nsigma (sqrt s0sq)) 'single-float))
+         (ring-radius (fake-radius krnl))
+         (srch-box    (inset-box (make-box-of-array harr) ring-radius ring-radius))
+         (srch-arr    (make-masked-array harr srch-box)))
+    (loop for mult in '(200 100 50 25 12 6 1)
+          for mult-thr = (* mult thr)
+          nconc
+            (loop for y from (box-top srch-box) below (box-bottom srch-box) nconc
+                    (loop for x from (box-left srch-box) below (box-right srch-box) nconc
+                            (let ((ampl (bref srch-arr y x)))
+                              (when (>= ampl mult-thr)
+                                (let+ ((:mvb (yc xc)   (locate-peak srch-arr y x))
+                                       ;; (_              (zap-peak srch-arr yc xc thr))
+                                       ;; (:mvb (ampl bg) (measure-flux ref-arr yc xc krnl))
+                                       (tnoise (sqrt (+ ampl s0sq)))
+                                       (snr    (/ ampl tnoise)))
+                                  (when (>= snr nsigma)
+                                    (zap-peak srch-arr yc xc thr)
+                                    `(,(make-star
+                                        :x    xc
+                                        :y    yc
+                                        :mag  (magn ref-img ampl)
+                                        :snr  snr
+                                        :core ampl
+                                        :bg   med ;; just to fill it with something, since we don't have bg here
+                                        :sd   tnoise))
+                                    ))))
+                          )))))
+
+(defun make-himg (img)
+  ;; Convolve the image array with a Gaussian kernel.
+  ;; Return the convolved image array.
+  (let+ ((arr       (img-arr img))
+         ( (ht wd)  (array-dimensions arr))
+         (box       (make-box-of-array arr))
+         (wdx       (um:ceiling-pwr2 wd))
+         (htx       (um:ceiling-pwr2 ht))
+         (wrk-arr   (make-image-array htx wdx :initial-element 0f0))
+         (prof      (img-fake-star img))
+         (kradius   (fake-radius prof))
+         (ksum      (fake-ksum prof))
+         (k2sum     (fake-k2sum prof))
+         (npix      (fake-npix prof))
+         (mnf       (/ ksum npix))
+         (norm      (- k2sum
+                       (/ (sqr ksum) npix)))
+         (krnl      (map-array (lambda (x)
+                                 (/ (- x mnf) norm))
+                               (fake-krnl prof)))
+         (kwrk-arr  (make-image-array htx wdx :initial-element 0f0)))
+    (implant-subarray wrk-arr arr 0 0)
+    (implant-subarray kwrk-arr krnl 0 0)
+    (let+ ((fimg  (fft2d:fwd wrk-arr))
+           (fkrnl (fft2d:fwd (vm:shift kwrk-arr `(,(- kradius) ,(- kradius)))))
+           (ffilt (map-array #'* fkrnl fimg))
+           (chimg (fft2d:inv ffilt))
+           (harr  (make-image-array ht wd)))
+      (map-array-into harr #'realpart (extract-subarray chimg box))
+      (let* ((med  (vm:median harr))
+             (mad  (vm:mad harr med))
+             (ximg (copy-img img)))
+        (setf (img-arr ximg) harr
+              (img-med ximg) med
+              (img-mad ximg) mad)
+        (show-img 'himg ximg :binarize nil)
+        harr
+        ))))
+
+#|
+(with-seestar
+  (setf *saved-img* (photom)))
+(measure-stars *saved-img*)
+(show-img 'img *saved-img*)
+(phot-limit *saved-img*)
+
+(setf *sub* (img-slice *saved-img* 540 960 400))
+(measure-stars *sub*)
+(show-img 'sub *sub*)
+
+(make-himg *saved-img*)
+(measure-stars *saved-img*)
+(with-seestar
+  (setf *saved-img* (photom)))
+ |#
 ;; ---------------------------------------------------------------
 ;; Live history scanning - how to provide a list of detected and
 ;; measured stars to the GUI running a mouse cursor, which wants to
@@ -436,6 +590,16 @@
         
 ;; ---------------------------------------------------------------
 
+(defun star-explain (img)
+  (lambda (xc yc &rest ignored)
+    (declare (ignore ignored))
+    (with-output-to-string (s)
+      (let ((*standard-output* s))
+        (measure-location img (round xc) (round yc)))
+      )))
+
+;; ---------------------------------------------------------------
+
 (defun show-img (pane img &key binarize)
   ;; Show an img o a pane. Optional binarize.
   ;; Default is linear z scaling from Median to Median + 15*MAD ≈ 10σ
@@ -466,6 +630,9 @@
     (plt:set-move-augmentation pane
                                (when (img-stars img)
                                  (star-readout img)))
+    (plt:set-click-augmentation pane
+                                (when (img-stars img)
+                                  (star-explain img)))
     ))
 
 #|
@@ -503,6 +670,7 @@
                      :title "SNR Histo"
                      :xtitle "SNR"
                      :ytitle "Density")
+      (hilight-stars 'himg stars :green)
       (plt:with-delayed-update ('stars)
         (show-img 'stars img)
         (hilight-stars 'stars stars :green))
