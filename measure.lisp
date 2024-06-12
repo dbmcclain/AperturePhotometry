@@ -20,7 +20,7 @@
 ;; MEASURE-LOCATION expression. See why it failed to show up in the
 ;; detections.
 #|
-(measure-location *saved-img* 576.  1230)
+(measure-location *saved-img* 518.  814.)
 
 
 |#
@@ -55,7 +55,9 @@
                                         :sd   tnoise))
                                   (format nil "Failed: Sum below threshold: Mag ≈ ~4,1F  SNR ≈ ~3,1F"
                                           (magn img ampl) snr)))
-                            "Failed: Fitted amplitude not positive")))
+                            (format nil "Failed: Fitted amplitude not positive, central peak ≈ ~4,1F mag"
+                                    (magn img (- (aref arr yc xc) med)))
+                            )))
                       )))
     "Failed: Could not find the star"))
 
@@ -229,6 +231,10 @@
 (defun measure-flux (arr y x prof)
   ;; Least squares fit of star core to Gaussian profile
   ;; return estimated amplitude and bg.
+  ;;
+  ;; Unit Delta function at center measures: A = (N - ksum)/Δ < 1, B = (k2sum-ksum)/Δ < 0.
+  ;; Gaussian kernel at location measures  : A = 1, B = 0 => engr mag = 0.
+  ;;
   (with-accessors ((krnl   fake-krnl)
                    (box    fake-box)
                    (Δ      fake-Δ)
@@ -248,6 +254,19 @@
                       Δ)))
       (values ampl bg)
       )))
+
+#|
+;; Unit Delta Function
+(let+ ((arr  (make-image-array 15 15 :initial-element 0f0))
+       (prof (img-fake-star *saved-img*)))
+  (setf (aref arr 7 7) 1f0)
+  (measure-flux arr 7 7 prof))
+
+;; Fake-star profile itself
+(let+ ((prof (img-fake-star *saved-img*))
+       (arr  (map-array (um:rcurry #'coerce 'single-float) (fake-krnl prof))))
+  (measure-flux arr 7 7 prof))
+ |#
 
 (defun s0sq (ref-img)
   ;; prepare estimated noise from measuring in a star-free region

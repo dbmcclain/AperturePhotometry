@@ -91,6 +91,8 @@
     (let+ ((img (extract-image path chan))
            (s0sq (s0sq img)))
       (setf (img-s0sq img) s0sq)
+      (when (> (reduce #'max (vm:make-overlay-vector (img-arr img))) 65000)
+        (warn "Image likely contains blown-out saturated stars"))
       (measure-stars img)
       (show-img 'img img)
       (report-stars img)
