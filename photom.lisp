@@ -61,10 +61,14 @@
   thr stars
   (mag-off   *mag-offset*)
   (core      *core-radius*)
-  (fake-star *fake-star*))
+  (fake-star *fake-star*)
+  s0sq)
 
 (defstruct star
   x y mag snr core bg sd)
+
+(defstruct fake
+  krnl Δ npix ksum k2sum radius sigma box)
 
 
 (defun do-with-img (img fn)
@@ -84,7 +88,9 @@
                                       :filter "*.fit;*.fts")
     (terpri)
     (format t "~%Channel ~A:" chan)
-    (let ((img (extract-image path chan)))
+    (let+ ((img (extract-image path chan))
+           (s0sq (s0sq img)))
+      (setf (img-s0sq img) s0sq)
       (measure-stars img)
       (show-img 'img img)
       (report-stars img)
@@ -449,7 +455,7 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
   (plt:fplot 'plt '(0 100) (lambda (x) (* 5 (abs (complex (sqrt x) 7.5)))) :color :red))
 
 (with-seestar
-  (let* ((mad      7)
+  (let* ((mad      5)
          (nf-sigma (* mad +mad/sd+ (1+ (* 2 *core-radius*)))))
     (labels ((inv-mag (x)
                (expt 10.0 (* -0.4 (- x *mag-offset*))))

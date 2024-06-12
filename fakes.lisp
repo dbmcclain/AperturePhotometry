@@ -65,27 +65,41 @@
   (let+ ((xtnt      (1+ (* 2 radius)))
          (xs        (vops:voffset (- radius) (vm:framp xtnt)))
          (exps      (map 'vector (um:rcurry #'gaussian sigma) xs))
-         (fake      (vm:outer-prod exps exps))
-         (flux      (vm:total fake))
-         (mag       (+ *mag-offset* (* -2.5f0 (log flux 10)))))
-    `(,fake ,radius ,mag)))
+         (arr       (vm:outer-prod exps exps))
+         (box       (make-box-of-array arr))
+         (ksum      (vm:total arr))
+         (k2sum     (vm:total (map-array #'* arr arr)))
+         (npix      (* xtnt xtnt))
+         (Δ         (- (* npix k2sum)
+                       (* ksum ksum))))
+    ;; Engineering mag of fake star will be 0.0.
+    (make-fake
+     :krnl   arr
+     :Δ      Δ
+     :npix   npix
+     :ksum   ksum
+     :k2sum  k2sum
+     :radius radius
+     :sigma  sigma
+     :box    box
+     )))
 
 (defun show-fake-star (fake-star)
-  (let+ (( (fake radius mag) fake-star)
-         (dists (vops:voffset (- radius) (vm:framp (1+ (* 2 radius))))))
-    (print `(:fake-mag ,mag))
-    (plt:tvscl 'fake-star fake
+  (let+ ((arr    (fake-krnl fake-star))
+         (radius (fake-radius fake-star))
+         (dists  (vops:voffset (- radius) (vm:framp (1+ (* 2 radius))))))
+    (plt:tvscl 'fake-star arr
                :magn  16
                :zlog  t
                :clear t)
-    (plt:spline 'fake-slice dists (array-row fake radius)
+    (plt:spline 'fake-slice dists (array-row arr radius)
                 :clear t
                 :title "Central Slice of Fake Star"
                 :xtitle "Dist from Center [pix]"
                 :ytitle "Amplitude"
                 :symbol :circle
                 :legend "Horizontal")
-    (plt:spline 'fake-slice dists (array-col fake radius)
+    (plt:spline 'fake-slice dists (array-col arr radius)
                 :color :red
                 :symbol :circle
                 :legend "Vertical")
@@ -94,7 +108,7 @@
 #|
 (let ((*core-radius* 3))
   (show-fake-star (make-gaussian-fake-star :sigma 0.75)))
-(let ((*core-radius* 5))
+(let ((*core-radius* 7))
   (show-fake-star (make-gaussian-fake-star :sigma 1.3)))
 (show-fake-star (img-fake-star *saved-img*))
  |#

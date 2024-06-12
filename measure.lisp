@@ -13,14 +13,21 @@
 
 ;; ---------------------------------------------------------------
 ;; For manual checking
+;;
+;; Move mouse to visible target, even if not in the detections list.
+;; Left-click mouse to reveal its approx position. That position is
+;; saved in the clipboard and can be pasted into the following
+;; MEASURE-LOCATION expression. See why it failed to show up in the
+;; detections.
 #|
-(measure-location *saved-img* 357.  518.)
+(measure-location *saved-img* 576.  1230)
 
 
 |#
 
 (defun #1=measure-location (img x y &key (srch-radius 9))
-  (let+ ((:mvb (krnl s0sq) (prep-kernel img))
+  (let+ ((krnl        (img-fake-star img))
+         (s0sq        (img-s0sq img))
          (arr         (img-arr img))
          (med         (img-med img))
          (nsigma      (img-thr img))
@@ -46,7 +53,8 @@
                                         :core ampl
                                         :bg   (- bg med)
                                         :sd   tnoise))
-                                  "Failed: Sum below threshold"))
+                                  (format nil "Failed: Sum below threshold: Mag ≈ ~4,1F  SNR ≈ ~3,1F"
+                                          (magn img ampl) snr)))
                             "Failed: Fitted amplitude not positive")))
                       )))
     "Failed: Could not find the star"))
@@ -221,40 +229,58 @@
 (defun measure-flux (arr y x prof)
   ;; Least squares fit of star core to Gaussian profile
   ;; return estimated amplitude and bg.
-  (let+ (( (krnl Δ npix ksum k2sum) prof)
-         (box    (make-box-of-radius x y (truncate (array-dimension krnl 0) 2)))
-         (star   (extract-subarray arr box))
-         (ssum   (vm:total star))
-         (kssum  (vm:total (map-array #'* krnl star)))
-         (ampl   (/ (- (* npix kssum)
-                       (* ksum ssum))
-                    Δ))
-         (bg     (/ (- (* k2sum ssum)
-                       (* ksum kssum))
-                    Δ)))
-    (values ampl bg)
-    ))
+  (with-accessors ((krnl   fake-krnl)
+                   (box    fake-box)
+                   (Δ      fake-Δ)
+                   (npix   fake-npix)
+                   (ksum   fake-ksum)
+                   (k2sum  fake-k2sum)
+                   (radius fake-radius)) prof
+    (let+ ((box    (move-box box (- x radius) (- y radius)))
+           (star   (extract-subarray arr box))
+           (ssum   (vm:total star))
+           (kssum  (vm:total (map-array #'* krnl star)))
+           (ampl   (/ (- (* npix kssum)
+                         (* ksum ssum))
+                      Δ))
+           (bg     (/ (- (* k2sum ssum)
+                         (* ksum kssum))
+                      Δ)))
+      (values ampl bg)
+      )))
 
+(defun s0sq (ref-img)
+  ;; prepare estimated noise from measuring in a star-free region
+  (let+ ((prof  (img-fake-star ref-img))
+         (Δ     (fake-Δ prof))
+         (npix  (fake-npix prof))
+         (mad   (img-mad ref-img))
+         (sd    (* mad +mad/sd+)))
+    (/ (* npix sd sd) Δ)))
+
+#|
 (defun prep-kernel (ref-img)
   ;; Precompute the geometric quantities based solely on the detailed
   ;; shape of the Gaussian kernel.
   (let+ ((fake-star   (first (img-fake-star ref-img)))
-         (mad         (img-mad ref-img))
          (ksum        (vm:total fake-star))
          (k2sum       (vm:total (map-array #'* fake-star fake-star)))
          (npix        (array-total-size fake-star))
          (Δ           (- (* npix k2sum)
                          (sqr ksum)))
          (prof        `(,fake-star ,Δ ,npix ,ksum ,k2sum))
+         (mad         (img-mad ref-img))
          (sd          (* mad +mad/sd+))      ;; image noise floor SD from measured image MAD
          (s0sq        (/ (* npix sd sd) Δ))) ;; expected noise from a star-free field.
     (values prof s0sq)))
-  
+|#
+
 (defun find-stars (ref-img &optional (thresh 5))
   ;; thresh in sigma units
   ;; Find and measure stars in the image.
   (let+ ((ref-arr     (img-arr ref-img))
-         (:mvb (krnl s0sq)  (prep-kernel ref-img))
+         (krnl        (img-fake-star ref-img))
+         (s0sq        (img-s0sq ref-img))
          (med         (img-med ref-img))
          (nsigma      thresh)
          (thr         (coerce (+ med (* nsigma (sqrt s0sq))) 'single-float))
