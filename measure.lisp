@@ -412,23 +412,25 @@
           nconc
             (loop for y from (box-top srch-box) below (box-bottom srch-box) nconc
                     (loop for x from (box-left srch-box) below (box-right srch-box) nconc
-                            (let ((ampl (bref srch-arr y x)))
-                              (when (>= ampl mult-thr)
-                                (let+ ((:mvb (yc xc)   (locate-peak srch-arr y x))
-                                       (ampl   (aref harr yc xc))
-                                       (tnoise (sqrt (+ ampl s0sq)))
-                                       (snr    (/ ampl tnoise)))
-                                  (when (>= snr nsigma)
-                                    (zap-peak srch-arr yc xc thr)
-                                    `(,(make-star
-                                        :x    xc
-                                        :y    yc
-                                        :mag  (magn ref-img ampl)
-                                        :snr  snr
-                                        :core ampl
-                                        :bg   med ;; just to fill it with something, since we don't have bg here
-                                        :sd   tnoise))
-                                    ))))
+                            (when (>= (bref srch-arr y x) mult-thr)
+                              (let+ ((:mvb (yc xc)   (locate-peak srch-arr y x))
+                                     (ampl   (aref harr yc xc))
+                                     (tnoise (sqrt (+ ampl s0sq)))
+                                     (snr    (/ ampl tnoise)))
+                                (when (>= snr nsigma)
+                                  ;; everything passed, so clear the
+                                  ;; mask so that we won't find this
+                                  ;; one again.
+                                  (zap-peak srch-arr yc xc thr)
+                                  `(,(make-star
+                                      :x    xc
+                                      :y    yc
+                                      :mag  (magn ref-img ampl)
+                                      :snr  snr
+                                      :core ampl
+                                      :bg   med ;; just to fill it with something, since we don't have bg here
+                                      :sd   tnoise))
+                                  )))
                           )))))
 
 (defun make-himg (img)
@@ -486,6 +488,26 @@
 (measure-stars *saved-img*)
 (with-seestar
   (setf *saved-img* (photom)))
+
+;; From AAVSO 3c273 Chart
+;; Me premised on 3c273 = 12.9 mag
+  AAVSO     Me       Me-AAVSO
+  10.2      10.0      -0.2
+  12.7      12.4      -0.3
+  13.5      13.2      -0.3
+  11.9      11.6      -0.3
+  13.2      13.0      -0.2
+  13.0      12.7      -0.3
+  12.5      12.2      -0.3
+  13.6      13.2      -0.4
+  14.2      13.9      -0.3
+  12.1      11.7      -0.4
+
+(let ((lst '(-0.2 -0.3 -0.3 -0.3 -0.2 -0.3 -0.3 -0.4 -0.3 -0.4)))
+  (list (vm:mean lst)     ;; => -0.3
+        (vm:stdev lst)))  ;; => 0.07
+;; So, 3c273 must really be about 13.2 mag right now.
+
  |#
 ;; ---------------------------------------------------------------
 ;; Live history scanning - how to provide a list of detected and

@@ -14,7 +14,8 @@
 (defvar *fits-segment-length* 2880)
 
 (defvar *fits-hdr*)
-(defvar *mag-offset*   #.(+ (- 12.9 -6.99)))
+(defvar *mag-offset*   #.(+ (- 12.9 -6.99)
+                            (- 13.2 12.9)))
 
 (defvar *fake-star*  nil)
 (defvar *fake-mag*   )
@@ -34,7 +35,8 @@
 
 (defun do-with-seestar (fn)
   (let* ((*core-radius*   2)
-         (*mag-offset*    #.(+ (- 12.9 -6.99)))
+         (*mag-offset*    #.(+ (- 12.9 -6.99)
+                               (- 13.2 12.90)))
          (*fake-star*     (or *fake-star-130*
                               (let ((*core-radius* 7))
                                 (setf *fake-star-130* (make-gaussian-fake-star :sigma 1.3))))))
@@ -445,6 +447,7 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
 (magn *saved-img* 110)
 
 (plt:histogram 'histo (mapcar #'star-sd (img-stars *saved-img*))
+               :ylog t
                :clear t)
 
 ;; ----------------------------------------------
@@ -453,7 +456,7 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
                           :initial-element 0))
        (stars (img-stars *saved-img*)))
   (dolist (star stars)
-    (let ((ix (round (+ (star-mag star) 0.5))))
+    (let ((ix (round (+ (star-mag star)))))
       (incf (aref arr ix))))
   (plt:plot 'plt arr
             :clear t
@@ -822,7 +825,18 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
     (plt:plot 'ring-sd-vs (mapcar #'star-mag stars)
               (mapcar #'star-sd stars)
               :clear t
+              :ylog t
+              :title "Star SD vs Magnitude"
+              :xtitle "Magnitude [mag]"
+              :ytitle "Star SD [σ]"
               :symbol :cross)
+    (phot-limit img)
+    (plt:plot 'phot-limit (mapcar #'star-mag stars)
+              (mapcar #'star-snr stars)
+              :color  :red
+              :symbol :cross
+              :alpha  0.4
+              :legend "Detected Stars")
 
     (format t "~%Count  Star Pos       Mag   SNR    CoreSum     BG    SD")
     (format t "~%         X    Y")
@@ -966,7 +980,7 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
              (snr (mag)
                (let ((flux (inv-mag mag)))
                  (/ flux (nf flux)))))
-      (plt:fplot 'plt2 '(6 20) #'snr
+      (plt:fplot 'phot-limit '(6 20) #'snr
                  :clear t
                  :thick 2
                  :ylog  t
@@ -974,7 +988,7 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
                  :xtitle "Star Magnitude [mag]"
                  :ytitle "SNR [σ]"
                  :legend (format nil "Noise Floor 1σ = ~4,1Fdu" nf-sigma))
-      (plt:plot 'plt2 '(6 20) '(5 5)
+      (plt:plot 'phot-limit '(6 20) '(5 5)
                 :color :gray50
                 :thick 3
                 :legend "5σ Limit")
