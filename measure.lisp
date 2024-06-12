@@ -38,17 +38,16 @@
     ))
          
 (defun #1=measure-location (img x y &key (srch-radius 4))
-  (let+ ((krnl         (img-fake-star img))
-         (s0sq         (img-s0sq img))
+  (let+ ((himg         (img-himg img))
          (arr          (img-arr img))
          (med          (img-med img))
-         (mad          (img-mad img))
+         (harr         (img-arr himg))
+         (s0sq         (img-s0sq img))
          (nsigma       (img-thr img))
-         (sd           (* mad +mad/sd+))
-         (thresh       (+ med (* nsigma sd)))
+         (thresh       (* nsigma (sqrt s0sq)))
          (srch-box     (make-box-of-radius x y srch-radius))
-         (:mvb (yc xc) (quick-locate-peak arr srch-box))
-         (:mvb (ampl bg) (measure-flux arr yc xc krnl)))
+         (:mvb (yc xc) (quick-locate-peak harr srch-box))
+         (ampl         (aref harr yc xc)))
     (format t "~%Starting positon ~D, ~D" x y)
     (format t "~%Thresh = ~6,1F" thresh)
     (format t "~%Peak position ~D, ~D" xc yc)
@@ -65,7 +64,7 @@
                       :mag  (magn img ampl)
                       :snr  snr
                       :core ampl
-                      :bg   (- bg med)
+                      :bg   med ;; for lack of something better to put here
                       :sd   tnoise))
             (format t "~%Failed: Sum below threshold: Mag ≈ ~4,1F  SNR ≈ ~3,1F"
                     (magn img ampl) snr)))
@@ -134,10 +133,13 @@
       )))
 
 (defun zap-peak (arr y x thr)
-  ;; Set all pixels in the star image to something below detection
-  ;; threshold. A pixel belongs to the star if it can be reached from
-  ;; a linear march in Y, and breadth sweeps in X. Spiral patterns
-  ;; will not be taken out this way.
+  ;; Clear the mask over all connected pixels, starting from the peak
+  ;; position X, Y.  Clearing mask bits makes the pixels ineligible to
+  ;; participate in future operations.
+  ;;
+  ;; A pixel belongs to the star if it can be reached from a linear
+  ;; march in Y, and breadth sweeps in X. Spiral patterns will not be
+  ;; taken out this way.
   ;;
   (labels ((zapx (y x)
              (clr-mask arr y x)
@@ -266,7 +268,7 @@
 ;;   I(i,j) = A*G(i,j; σ) + B
 ;;
 ;;   Δ = N * Σ[G(i,j; σ)^2] - (Σ[G(i,j;σ)])^2                             = N G^2_ii - G_ii^2 > 0
-;;   A = (N * Σ[I(i,j)*G(i,j;σ)] - Σ[G(i,j;σ)] * Σ[I(i,j)])/Δ             = (N I_ij G_ji - G_ii I_ii)/Δ 
+;;   A = (N * Σ[I(i,j)*G(i,j;σ)] - Σ[G(i,j;σ)] * Σ[I(i,j)])/Δ             = (N I_ij G_ij - G_ii I_ii)/Δ 
 ;;   B = (Σ[G(i,h;σ)^2] * Σ[I(i,j)] - Σ[G(i,j;σ)] * Σ[I(i,j)*G(i,j;σ)])/Δ = (G^2_ii I_jj - G_kk G_ij I_ij)/Δ
 ;;
 ;;   Noise Variance in star-free region, given SD for image: (= 1.4826 * MAD)
@@ -281,6 +283,7 @@
 ;;
 ;;     SNR = A / Sqrt(S*^2_meas)
 ;;
+#| ;; No longer used directly - replaced by Convolution in the Fourier domain
 (defun measure-flux (arr y x prof)
   ;; Least squares fit of star core to Gaussian profile
   ;; return estimated amplitude and bg.
@@ -308,7 +311,7 @@
                       Δ)))
       (values ampl bg)
       )))
-
+|#
 #|
 ;; Unit Delta Function
 (let+ ((arr  (make-image-array 15 15 :initial-element 0f0))
@@ -394,13 +397,13 @@
 (defun find-stars (ref-img &optional (thresh 5))
   ;; thresh in sigma units
   ;; Find and measure stars in the image.
-  (let+ (;; (ref-arr     (img-arr ref-img))
-         (krnl        (img-fake-star ref-img))
+  (let+ ((krnl        (img-fake-star ref-img))
          (s0sq        (img-s0sq ref-img))
          (nsigma      thresh)
          (med         (img-med ref-img))
-         (harr        (make-himg ref-img))
-         (thr         (coerce (* nsigma (sqrt s0sq)) 'single-float))
+         (himg        (make-himg ref-img))
+         (harr        (img-arr himg))
+         (thr         (* nsigma (sqrt s0sq)))
          (ring-radius (fake-radius krnl))
          (srch-box    (inset-box (make-box-of-array harr) ring-radius ring-radius))
          (srch-arr    (make-masked-array harr srch-box)))
@@ -412,8 +415,7 @@
                             (let ((ampl (bref srch-arr y x)))
                               (when (>= ampl mult-thr)
                                 (let+ ((:mvb (yc xc)   (locate-peak srch-arr y x))
-                                       ;; (_              (zap-peak srch-arr yc xc thr))
-                                       ;; (:mvb (ampl bg) (measure-flux ref-arr yc xc krnl))
+                                       (ampl   (aref harr yc xc))
                                        (tnoise (sqrt (+ ampl s0sq)))
                                        (snr    (/ ampl tnoise)))
                                   (when (>= snr nsigma)
@@ -437,18 +439,17 @@
          (box       (make-box-of-array arr))
          (wdx       (um:ceiling-pwr2 wd))
          (htx       (um:ceiling-pwr2 ht))
-         (wrk-arr   (make-image-array htx wdx :initial-element 0f0))
          (prof      (img-fake-star img))
          (kradius   (fake-radius prof))
+         (Δ         (fake-Δ prof))
          (ksum      (fake-ksum prof))
-         (k2sum     (fake-k2sum prof))
          (npix      (fake-npix prof))
          (mnf       (/ ksum npix))
-         (norm      (- k2sum
-                       (/ (sqr ksum) npix)))
+         (norm      (/ Δ npix))
          (krnl      (map-array (lambda (x)
                                  (/ (- x mnf) norm))
                                (fake-krnl prof)))
+         (wrk-arr   (make-image-array htx wdx :initial-element 0f0))
          (kwrk-arr  (make-image-array htx wdx :initial-element 0f0)))
     (implant-subarray wrk-arr arr 0 0)
     (implant-subarray kwrk-arr krnl 0 0)
@@ -460,12 +461,13 @@
       (map-array-into harr #'realpart (extract-subarray chimg box))
       (let* ((med  (vm:median harr))
              (mad  (vm:mad harr med))
-             (ximg (copy-img img)))
-        (setf (img-arr ximg) harr
-              (img-med ximg) med
-              (img-mad ximg) mad)
-        (show-img 'himg ximg :binarize nil)
-        harr
+             (himg (copy-img img)))
+        (setf (img-himg img)  himg
+              (img-arr  himg) harr
+              (img-med  himg) med
+              (img-mad  himg) mad
+              (img-himg himg) himg)
+        himg
         ))))
 
 #|
@@ -478,6 +480,7 @@
 (setf *sub* (img-slice *saved-img* 540 960 400))
 (measure-stars *sub*)
 (show-img 'sub *sub*)
+(report-stars *sub*)
 
 (make-himg *saved-img*)
 (measure-stars *saved-img*)
@@ -655,10 +658,12 @@
 ;; ---------------------------------------------------------------
 
 (defun measure-stars (img &key (thresh 5))
-  (let* ((stars (find-stars img thresh)))
-    (when stars
-      (setf (img-thr   img) thresh
-            (img-stars img) stars))
+  (let* ((stars (find-stars img thresh))
+         (himg  (img-himg img)))
+    (setf (img-thr   img)  thresh
+          (img-stars img)  stars
+          (img-thr   himg) thresh
+          (img-stars himg) stars)
     (let* ((snrs  (map 'vector #'star-snr stars))
            (pc25  (vm:percentile snrs 25))
            (pc75  (vm:percentile snrs 75)))
@@ -670,7 +675,9 @@
                      :title "SNR Histo"
                      :xtitle "SNR"
                      :ytitle "Density")
-      (hilight-stars 'himg stars :green)
+      (plt:with-delayed-update ('himg)
+        (show-img 'himg himg :binarize nil)
+        (hilight-stars 'himg stars :green))
       (plt:with-delayed-update ('stars)
         (show-img 'stars img)
         (hilight-stars 'stars stars :green))
