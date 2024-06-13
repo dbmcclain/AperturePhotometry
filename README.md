@@ -100,7 +100,7 @@ However, what we have implemented matches just the star detection front end of D
 
 Checking against AAVSO star charts shows that we are already getting better accuracy than the charts report. Our measured magnitudes are ±0.07 mag of AAVSO numbers. (And as a result, we should be using 13.2 mag for 3C273).
 
-![M27](https://github.com/dbmcclain/AperturePhotometry/assets/3160577/4f252d35-dd09-414f-be67-b08161f66902)
+![M27](https://github.com/dbmcclain/AperturePhotometry/assets/3160577/236fc8a5-ac5f-4642-baaf-a4e890332623)
 
 ![M5](https://github.com/dbmcclain/AperturePhotometry/assets/3160577/cf2d3896-586a-4db7-ae8c-a5a2a2ef357d)
 
