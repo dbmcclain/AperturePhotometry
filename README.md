@@ -92,7 +92,7 @@ We are implementing the DAOPHOT method for finding stars, using convolution by a
 
 What I'm seeing for results is nothing short of astonishing! If you can see it, then it probably got detected and measured. Even many you can't readily see. But, in pixel peeping, some faint smudges simply don't reach detection threshold levels, as shown by our mouse-click statistics feedback. 
 
-I took a stack on M5 (the globular cluster in Hercules). Even in the most crowded regions of the cluster, the detection algorithm works wonders. We are able to separate and measure very close pairs of stars - too close to even see them clearly separated. Image stacks, of 5 mins duration, coming off a little 2-inch telescope, are showing statistically significant detections of stars down to magnutude 16.2. The camera/telescope combination has a best possible limit of 16.7 mag, if you could drive the noise to zero. 
+I took a stack on M5 (the globular cluster in Serpens). Even in the most crowded regions of the cluster, the detection algorithm works wonders. We are able to separate and measure very close pairs of stars - too close to even see them clearly separated. Image stacks, of 5 mins duration, coming off a little 2-inch telescope, are showing statistically significant detections of stars down to magnutude 16.2. The camera/telescope combination has a best possible limit of 16.7 mag, if you could drive the noise to zero. 
 
 Single 10s exposure images show typical limits around 14.5 mag. 1 minute stacks show 15.0 mag. The dynamic range of the system shows that stars brighter than about 7.5 mag will saturate and blow the cores of the stars in 10s exposures. So we have an effective dynamic range of about 7.5 mag in a 1 min stack, or about 1000:1 for the 16-bit camera. (The camera sensor is most likely really only 12-14 bits.)
 
@@ -102,5 +102,5 @@ Checking against AAVSO star charts shows that we are already getting better accu
 
 ![M27](https://github.com/dbmcclain/AperturePhotometry/assets/3160577/4f252d35-dd09-414f-be67-b08161f66902)
 
-![M5](https://github.com/dbmcclain/AperturePhotometry/assets/3160577/c2099e70-ba96-49b9-9a5d-570c5addad70)
+![M5](https://github.com/dbmcclain/AperturePhotometry/assets/3160577/cf2d3896-586a-4db7-ae8c-a5a2a2ef357d)
 
