@@ -285,7 +285,7 @@
 ;;
 ;;     SNR = A / Sqrt(S*^2_meas)
 ;;
-#| ;; No longer used directly - replaced by Convolution in the Fourier domain
+
 (defun measure-flux (arr y x prof)
   ;; Least squares fit of star core to Gaussian profile
   ;; return estimated amplitude and bg.
@@ -311,9 +311,9 @@
            (bg     (/ (- (* k2sum ssum)
                          (* ksum kssum))
                       Δ)))
-      (values ampl bg)
+      (values ampl bg star)
       )))
-|#
+
 #|
 ;; Unit Delta Function
 (let+ ((arr  (make-image-array 15 15 :initial-element 0f0))
@@ -335,6 +335,47 @@
          (mad   (img-mad ref-img))
          (sd    (* mad +mad/sd+)))
     (/ (* npix sd sd) Δ)))
+
+(defun improve-sigma (img &key (initial-sigma 1.3) (radius 7))
+  (let+ ((stars   (remove-if (lambda (star)
+                               ;; Improvements will be based on stars
+                               ;; with magnitudes: 8.0 <= mag <= 11.5
+                               (let ((mag (star-mag star)))
+                                 (or (< mag  8.0)
+                                     (> mag 11.5))
+                                 ))
+                             (img-stars img))))
+    (format t "~%~D stars selected" (length stars))
+    (labels ((quality-sum (vec)
+               (let+ ((prof   (make-gaussian-fake-star :sigma (aref vec 0) :radius radius)))
+                 (loop for star in stars sum
+                         (let+ ((star-mag  (star-mag star))
+                                (:mvb (ampl bg star)
+                                    (measure-flux (img-arr img) (star-y star) (star-x star) prof)))
+                           (vm:total
+                            ;; Squared Gaussian weighted, amplitude
+                            ;; normalized, deviations between core
+                            ;; model and star profile,
+                            (map-array (lambda (star-val gval)
+                                         (coerce
+                                          (sqr (* gval
+                                                  star-mag ;; give a little more weight to the brighter stars
+                                                  (/ (- star-val
+                                                        (+ bg (* ampl gval)))
+                                                     ampl)))
+                                          'single-float))
+                                       star (fake-krnl prof)))
+                           )))))
+      (vm:simplex #'quality-sum (vector initial-sigma))
+      )))
+
+#|
+(improve-sigma *saved-img*)
+(with-seestar
+  (setf *saved-img* (photom)))
+|#
+
+;; --------------------------------------------------------------------------
 
 #|
 (defun prep-kernel (ref-img)
@@ -493,21 +534,25 @@
 
 ;; From AAVSO 3c273 Chart
 ;; Me premised on 3c273 = 12.9 mag
-  AAVSO     Me       Me-AAVSO
-  10.2      10.0      -0.2
-  12.7      12.4      -0.3
-  13.5      13.2      -0.3
-  11.9      11.6      -0.3
-  13.2      13.0      -0.2
-  13.0      12.7      -0.3
-  12.5      12.2      -0.3
-  13.6      13.2      -0.4
-  14.2      13.9      -0.3
-  12.1      11.7      -0.4
+  AAVSO     Me       Me-AAVSO   Me2  M32-AAVSO
+  10.2      10.0      -0.2      10.5  +0.3
+  12.7      12.4      -0.3      12.8  +0.1
+  13.5      13.2      -0.3      13.6  +0.1
+  11.9      11.6      -0.3      12.0  +0.1
+  13.2      13.0      -0.2      13.4  +0.2
+  13.0      12.7      -0.3      13.1  +0.1
+  12.5      12.2      -0.3      12.6  +0.1
+  13.6      13.2      -0.4      13.7  +0.1
+  14.2      13.9      -0.3      14.3  +0.1
+  12.1      11.7      -0.4      12.1   0.0
 
-(let ((lst '(-0.2 -0.3 -0.3 -0.3 -0.2 -0.3 -0.3 -0.4 -0.3 -0.4)))
-  (list (vm:mean lst)     ;; => -0.3
-        (vm:stdev lst)))  ;; => 0.07
+;; Me = original meas with core model sigma = 1.3
+;; Me2 = adaptively recomputed sigma
+
+(let ((lst '(-0.2 -0.3 -0.3 -0.3 -0.2 -0.3 -0.3 -0.4 -0.3 -0.4))
+      (lst '(0.3 0.1 0.1 0.1 0.2 0.1 0.1 0.1 0.1 0.0)))
+  (list (vm:mean lst)     ;; => -0.3 => 0.12
+        (vm:stdev lst)))  ;; => 0.07 => 0.079
 ;; So, 3c273 must really be about 13.2 mag right now.
 
  |#
@@ -681,9 +726,34 @@
 
 ;; ---------------------------------------------------------------
 
+(defun improve-stars (img thresh stars0)
+  ;; Using initial find, try to improve the Gaussian core model and redo
+  (if (>= (count-if (lambda (star)
+                      (let ((mag (star-mag star)))
+                        (and (> mag 8.0)
+                             (< mag 11.5))))
+                    stars0)
+          5)
+      ;; Don't bother doing this unless at least 5 stars to base on
+      (progn
+        (setf (img-stars img) stars0)
+        (let+ ((prof       (img-fake-star img))
+               (sigma0     (fake-sigma prof))
+               (radius     (fake-radius prof))
+               (fit-parms  (improve-sigma img :initial-sigma sigma0 :radius radius))
+               (new-sigma  (aref fit-parms 0))
+               (new-prof   (make-gaussian-fake-star :sigma new-sigma :radius radius)))
+          (format t "~%Improved sigma: ~6,4F" new-sigma)
+          (setf (img-fake-star img) new-prof)
+          (find-stars img thresh)
+          ))
+    ;; else
+    stars0))
+
 (defun measure-stars (img &key (thresh 5))
-  (let* ((stars (find-stars img thresh))
-         (himg  (img-himg img)))
+  (let+ ((stars0 (find-stars img thresh))
+         (stars  (improve-stars img thresh stars0))
+         (himg   (img-himg img)))
     (setf (img-thr   img)  thresh
           (img-stars img)  stars
           (img-thr   himg) thresh

@@ -15,7 +15,8 @@
 
 (defvar *fits-hdr*)
 (defvar *mag-offset*   #.(+ (- 12.9 -6.99)
-                            (- 13.2 12.9)))
+                               (- 13.2 12.90)
+                               (- 0     0.12)))
 
 (defvar *fake-star*  nil)
 (defvar *fake-mag*   )
@@ -36,10 +37,11 @@
 (defun do-with-seestar (fn)
   (let* ((*core-radius*   2)
          (*mag-offset*    #.(+ (- 12.9 -6.99)
-                               (- 13.2 12.90)))
+                               (- 13.2 12.90)
+                               (- 0     0.12)))
          (*fake-star*     (or *fake-star-130*
                               (let ((*core-radius* 7))
-                                (setf *fake-star-130* (make-gaussian-fake-star :sigma 1.3))))))
+                                (setf *fake-star-130* (make-gaussian-fake-star :sigma 1.27512 ))))))
     (funcall fn)))
 
 (defun do-with-seestar-channel (fn)
@@ -981,6 +983,9 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
              (snr (mag nf)
                (let ((flux (inv-mag mag)))
                  (/ flux (nf flux nf)))))
+      ;; Noise free situation, sigma = Sqrt(Flux). So min 5σ flux is 25 du.
+      ;; Theoretical statistical limit 5σ should = MagOffset - 2.5 Log10(25)
+      ;;                                         = MagOffset - 3.49
       (plt:fplot 'phot-limit '(7 18) (um:rcurry #'snr 0)
                  :clear t
                  :thick 1
