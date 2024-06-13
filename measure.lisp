@@ -44,19 +44,20 @@
          (harr         (img-arr himg))
          (s0sq         (img-s0sq img))
          (nsigma       (img-thr img))
-         (thresh       (* nsigma (sqrt s0sq)))
+         ;; (thresh       (* nsigma (sqrt s0sq)))
          (srch-box     (make-box-of-radius x y srch-radius))
          (:mvb (yc xc) (quick-locate-peak harr srch-box))
          (ampl         (aref harr yc xc)))
-    (format t "~%Starting positon ~D, ~D" x y)
-    (format t "~%Thresh = ~6,1F" thresh)
-    (format t "~%Peak position ~D, ~D" xc yc)
-    (format t "~%Peak value ~F" (aref arr yc xc))
+    (format t "~%Cursor position ~D, ~D" x y)
+    (format t "~%Peak position   ~D, ~D (~@D,~@D)" xc yc (- xc x) (- yc y))
     (when (> (aref arr yc xc) 65000)
       (format t "~%!! Star likely blown !!"))
     (if (plusp ampl)
         (let+ ((tnoise (sqrt (+ ampl s0sq)))
+               (thresh (* nsigma tnoise))
                (snr    (/ ampl tnoise)))
+          (format t "~%Peak value ~7,1F" ampl)
+          (format t "~%Thresh     ~7,1F" thresh)
           (if (>= snr nsigma)
               (print (make-star
                       :x    xc
@@ -66,9 +67,9 @@
                       :core ampl
                       :bg   med ;; for lack of something better to put here
                       :sd   tnoise))
-            (format t "~%Failed: Sum below threshold: Mag ≈ ~4,1F  SNR ≈ ~3,1F"
+            (format t "~%Failed: Sum below threshold:~%   Mag ≈ ~4,1F  SNR ≈ ~3,1F"
                     (magn img ampl) snr)))
-      (format t "~%Failed: Fitted amplitude not positive, central peak ≈ ~4,1F mag"
+      (format t "~%Failed: Fitted amplitude not positive,~%   central peak ≈ ~4,1F mag"
               (magn img (- (aref arr yc xc) med)))
       )))
 
