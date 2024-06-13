@@ -83,3 +83,13 @@ But here we don't need to get so fancy. I want to measure everything above thres
 But now... I relent. I see the virtue in using a Gaussian core + BG model. Least-squares solution for star amplitude is good. Does not work well on blown-out bright stars, but nothing else could do any better either. And now we are no longer "Aperture Photometry", but rather a fitted Photometry. 
 
 I decided to switch over because it was apparent that the brightest stars were leaving too much uncounted. It seemed that the aperture core size needed to adapt to how bright the star is. Using the Gaussian fitting is a kind of naturally adaptive solution. So I expanded the Gaussian to a 15x15 overall size, with σ adapted from estimated core sizes of stars. Noise contribution in the wings is not bad, since it is weighted by very low amplitude Gaussian wings at larger distances from the core. Conversely, had I done this expansion in Aperture Photometry, the noise would be killing us at larger distance from the core.
+
+Update 24-06-13
+---
+We now have nice cursor readback in place. Just move the cursor near a star and it reports the detected star magnitude. Put the cusor anywhere and click the left button to see a complete readback of detection and measurement statistics right there at the cursor position. 
+
+What I'm seeing for results is nothing short of astonishing! If you can see it, then it probably got detected and measured. But, in pixel peeping, some smudges simply don't reach detection threshold levels. I took a stack on M5 (the globular cluster in Hercules). Even in the most crowded regions of the cluster, the detection algorithm works wonders. Image stacks, of 5 mins duration, coming off a little 2-inch telescope, are showing statistically significant detections of stars down to magnutude 16.3. The camera/telescope combination has a best possible limit of 16.7 mag, if you could drive the noise to zero. Single 10s exposure images show typical limits around 14.5 mag. 1 minute stacks show 15.0 mag.
+
+However, what we have implemented matches just the star detection front end of DAOPHOT. The rest of DAOPHOT performs a much more rigorous teasing apart of crowded star groups and does multi-star simultaneous fitting against semi-empirical model PSF's. It is indeed the Cadillac system for study of crowded star fields. For the moment I have no intention of proceeding any further. This was intended to be a quick and dirty system for scanning, mostly amateur, images.
+
+Checking against AAVSO star charts shows that we are already getting better accuracy than the charts report. Our measured magnitudes are ±0.07 mag of AAVSO numbers. (And as a result, we should be using 13.2 mag for 3C273).
