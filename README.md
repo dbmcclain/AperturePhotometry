@@ -93,3 +93,8 @@ What I'm seeing for results is nothing short of astonishing! If you can see it, 
 However, what we have implemented matches just the star detection front end of DAOPHOT. The rest of DAOPHOT performs a much more rigorous teasing apart of crowded star groups and does multi-star simultaneous fitting against semi-empirical model PSF's. It is indeed the Cadillac system for study of crowded star fields. For the moment I have no intention of proceeding any further. This was intended to be a quick and dirty system for scanning, mostly amateur, images.
 
 Checking against AAVSO star charts shows that we are already getting better accuracy than the charts report. Our measured magnitudes are ±0.07 mag of AAVSO numbers. (And as a result, we should be using 13.2 mag for 3C273).
+
+![M27](https://github.com/dbmcclain/AperturePhotometry/assets/3160577/4f252d35-dd09-414f-be67-b08161f66902)
+
+![M5](https://github.com/dbmcclain/AperturePhotometry/assets/3160577/c2099e70-ba96-49b9-9a5d-570c5addad70)
+
