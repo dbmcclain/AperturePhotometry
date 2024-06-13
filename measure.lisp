@@ -350,7 +350,7 @@
                (let+ ((prof   (make-gaussian-fake-star :sigma (aref vec 0) :radius radius)))
                  (loop for star in stars sum
                          (let+ ((star-mag  (star-mag star))
-                                (:mvb (ampl bg star)
+                                (:mvb (ampl bg star-img)
                                     (measure-flux (img-arr img) (star-y star) (star-x star) prof)))
                            (vm:total
                             ;; Squared Gaussian weighted, amplitude
@@ -364,7 +364,7 @@
                                                         (+ bg (* ampl gval)))
                                                      ampl)))
                                           'single-float))
-                                       star (fake-krnl prof)))
+                                       star-img (fake-krnl prof)))
                            )))))
       (vm:simplex #'quality-sum (vector initial-sigma))
       )))
