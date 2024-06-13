@@ -102,5 +102,5 @@ Checking against AAVSO star charts shows that we are already getting better accu
 
 ![M27](https://github.com/dbmcclain/AperturePhotometry/assets/3160577/4f252d35-dd09-414f-be67-b08161f66902)
 
-![M5](https://github.com/dbmcclain/AperturePhotometry/assets/3160577/c2099e70-ba96-49b9-9a5d-570c5addad70)
+![M5](https://github.com/dbmcclain/AperturePhotometry/assets/3160577/cf2d3896-586a-4db7-ae8c-a5a2a2ef357d)
 
