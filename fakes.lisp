@@ -58,21 +58,28 @@
 ;; Make Gaussian Fake Star
 
 (defun gaussian (x sigma)
-  (let* ((z  (/ x sigma)))
-    (exp (* -0.5f0 (sqr z)))
+  (let* ((z  (/ x sigma))
+         (flattening 1f0))
+    (/ (min flattening (exp (* -0.5f0 (sqr z)))) flattening)
     ))
 
-(defun make-gaussian-fake-star (&key (sigma 0.75f0) (radius *core-radius*))
-  (let+ ((xtnt      (1+ (* 2 radius)))
-         (xs        (vops:voffset (- radius) (vm:framp xtnt)))
-         (exps      (map 'vector (um:rcurry #'gaussian (coerce sigma 'single-float)) xs))
-         (arr       (vm:outer-prod exps exps))
-         (box       (make-box-of-array arr))
-         (ksum      (vm:total arr))
-         (k2sum     (vm:total (map-array #'* arr arr)))
-         (npix      (* xtnt xtnt))
-         (Δ         (- (* npix k2sum)
-                       (* ksum ksum))))
+(defun moffat (x alpha beta)
+  (let ((z (/ x alpha)))
+    (expt (/ (+ 1f0 (sqr z))) beta)))
+
+#|
+(plt:fplot 'g '(-7 7) (um:rcurry #'gaussian 1.3)
+           :clear t)
+(plt:fplot 'g '(-7 7) (um:rcurry #'moffat 2.5 1.7)
+           :color :red)
+ |#
+(defun create-profile (arr radius sigma)
+  (let+ ((box    (make-box-of-array arr))
+         (ksum   (vm:total arr))
+         (k2sum  (vm:total (map-array #'* arr arr)))
+         (npix   (reduce #'* (array-dimensions arr)))
+         (Δ      (- (* npix k2sum)
+                    (* ksum ksum))))
     ;; Engineering mag of fake star will be 0.0.
     (make-fake
      :krnl   arr
@@ -84,6 +91,49 @@
      :sigma  sigma
      :box    box
      )))
+
+(defun make-gaussian-fake-star (&key (sigma 0.75f0) (radius *core-radius*))
+  (let+ ((xtnt      (1+ (* 2 radius)))
+         (xs        (vm:bipolar-framp xtnt))
+         (exps      (map 'vector (um:rcurry #'gaussian (coerce sigma 'single-float)) xs))
+         (arr       (vm:outer-prod exps exps)))
+    (create-profile arr radius sigma)))
+
+(defun rtop (x y)
+  (values (abs (complex x y))
+          (atan y x)))
+
+(defun ptor (r th)
+  (let ((cs  (cis th)))
+    (values (* r (realpart cs))
+            (* r (imagpart cs)))
+    ))
+
+(defun make-gaussian-elliptical-fake-star (&key (sigma1 0.75f0) (sigma2 0.75f0) (theta 0f0) (radius *core-radius*))
+  (let+ ((xtnt      (1+ (* 2 radius)))
+         (arr       (make-image-array xtnt xtnt)))
+    (loop for y from (- radius) to radius
+          for iy from 0
+          do
+            (loop for x from (- radius) to radius
+                  for ix from 0
+                  do
+                    (let+ ((:mvb (r  th) (rtop x y))
+                           (:mvb (xx yy) (ptor r (- th theta)))
+                           (z    (coerce (* (gaussian xx sigma1) (gaussian yy sigma2)) 'single-float)))
+                      (setf (aref arr iy ix) z))
+                    ))
+    (create-profile arr radius (list sigma1 sigma2 theta))))
+
+(defun make-moffat-fake-star (&key (alpha 1f0) (beta 1f0) (radius *core-radius*))
+  (let+ ((xtnt      (1+ (* 2 radius)))
+         (xs        (vm:bipolar-framp xtnt))
+         (exps      (map 'vector (um:rcurry #'moffat
+                                            (coerce alpha 'single-float)
+                                            (coerce beta 'single-float))
+                         xs))
+         (arr       (vm:outer-prod exps exps)))
+    (create-profile arr radius (list alpha beta))))
 
 (defun show-fake-star (fake-star)
   (let+ ((arr    (fake-krnl fake-star))

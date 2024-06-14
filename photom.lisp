@@ -16,8 +16,8 @@
 (defvar *fits-hdr*)
 (defvar *mag-offset*   #.(+ (- 12.9 -6.99)
                                (- 13.2 12.90)
-                               (- 0     0.12)))
-
+                               (- 0     0.12)
+                               (- 13.2 13.34425)))
 (defvar *fake-star*  nil)
 (defvar *fake-mag*   )
 (defvar *fake-radius*)
@@ -38,10 +38,14 @@
   (let* ((*core-radius*   2)
          (*mag-offset*    #.(+ (- 12.9 -6.99)
                                (- 13.2 12.90)
-                               (- 0     0.12)))
+                               (- 0     0.12)
+                               (- 13.2 13.34425)))
          (*fake-star*     (or *fake-star-130*
                               (let ((*core-radius* 7))
-                                (setf *fake-star-130* (make-gaussian-fake-star :sigma 1.27512 ))))))
+                                (setf *fake-star-130* (make-gaussian-elliptical-fake-star
+                                                       :sigma1 1.5f0
+                                                       :sigma2 1.5f0
+                                                       :theta  1.0f0 ))))))
     (funcall fn)))
 
 (defun do-with-seestar-channel (fn)

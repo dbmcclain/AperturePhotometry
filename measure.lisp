@@ -310,8 +310,16 @@
                       Δ))
            (bg     (/ (- (* k2sum ssum)
                          (* ksum kssum))
-                      Δ)))
-      (values ampl bg star)
+                      Δ))
+           (resid  (map-array (lambda (sval gval)
+                                ;; residual image, in the sense of (Star - Gaussian)
+                                (coerce
+                                 (- sval
+                                    (+ bg
+                                       (* ampl gval)))
+                                 'single-float))
+                              star krnl)))
+      (values ampl bg resid)
       )))
 
 #|
@@ -327,6 +335,9 @@
   (measure-flux arr 7 7 prof))
  |#
 
+;; -------------------------------------------------------------
+;; Noise behavior of matched filtering
+
 (defun s0sq (ref-img)
   ;; prepare estimated noise from measuring in a star-free region
   (let+ ((prof  (img-fake-star ref-img))
@@ -336,7 +347,9 @@
          (sd    (* mad +mad/sd+)))
     (/ (* npix sd sd) Δ)))
 
-(defun improve-sigma (img &key (initial-sigma 1.3) (radius 7))
+;; -------------------------------------------------------------
+
+(defun improve-sigma (img &key fit-args (radius 7))
   (let+ ((stars   (remove-if (lambda (star)
                                ;; Improvements will be based on stars
                                ;; with magnitudes: 8.0 <= mag <= 11.5
@@ -344,35 +357,123 @@
                                  (or (< mag  8.0)
                                      (> mag 11.5))
                                  ))
-                             (img-stars img))))
-    (format t "~%~D stars selected" (length stars))
+                             (img-stars img)))
+         #||#
+         (radj   (let ((xs  (vm:bipolar-framp (+ 1 radius radius))))
+                   (map-array (lambda (x)
+                                (/ (max 1f0 (sqrt (* 6.28f0 (abs x))))))
+                              (vm:outer-prod xs xs))))
+         #||#
+         )
+    (format t "~%~D stars selected to guide improvement" (length stars))
     (labels ((quality-sum (vec)
-               (let+ ((prof   (make-gaussian-fake-star :sigma (aref vec 0) :radius radius)))
+               (let+ ((prof  (make-gaussian-elliptical-fake-star
+                              :sigma1 (aref vec 0)
+                              :sigma2 (aref vec 1)
+                              :theta  (aref vec 2)
+                              :radius radius)))
                  (loop for star in stars sum
-                         (let+ ((star-mag  (star-mag star))
-                                (:mvb (ampl bg star-img)
+                         (let+ ((:mvb (ampl _ resid-img)
                                     (measure-flux (img-arr img) (star-y star) (star-x star) prof)))
                            (vm:total
                             ;; Squared Gaussian weighted, amplitude
                             ;; normalized, deviations between core
                             ;; model and star profile,
-                            (map-array (lambda (star-val gval)
+                            (map-array (lambda (resid-val gval)
                                          (coerce
-                                          (sqr (* gval
-                                                  star-mag ;; give a little more weight to the brighter stars
-                                                  (/ (- star-val
-                                                        (+ bg (* ampl gval)))
-                                                     ampl)))
+                                          (sqr (* ;; gval
+                                                  ;; (/ resid-val ampl)
+                                                  resid-val
+                                                  ))
                                           'single-float))
-                                       star-img (fake-krnl prof)))
+                                       ;; (map-array #'* resid-img radj)
+                                       resid-img
+                                       (fake-krnl prof)))
                            )))))
-      (vm:simplex #'quality-sum (vector initial-sigma))
-      )))
+      (let+ ((:mvb (vfit _ niter)
+                 (vm:simplex #'quality-sum (apply #'vector fit-args)))
+             ;; (sigma   (aref vfit 0))
+             (sigma1  (aref vfit 0))
+             (sigma2  (aref vfit 1))
+             (theta   (aref vfit 2))
+             ;; (alpha  (aref vfit 0))
+             ;; (beta   (aref vfit 1))
+             ;; (_  (format t "~%~D iters, alpha = ~6,4F, beta = ~6,4F" niter alpha beta))
+             
+             (_  (format t "~%~D iters, σ1 = ~6,4F, σ2 = ~6,4F, Θ = ~6,4F" niter sigma1 sigma2 theta))
+             ;; (_  (format t "~%~D iters, sigma = ~6,4F" niter sigma))
+             ;; (prof    (make-moffat-fake-star :alpha alpha :beta beta :radius radius))
+             (prof    (make-gaussian-elliptical-fake-star
+                       :sigma1 sigma1
+                       :sigma2 sigma2
+                       :theta  theta
+                       :radius radius))
+             (twt     0)
+             (resid   nil))
+        (loop for star in stars do
+                (let+ ((:mvb (ampl _ resid-img)
+                           (measure-flux (img-arr img) (star-y star) (star-x star) prof))
+                       (mag  (star-mag star)))
+                  ;; (incf twt mag)
+                  (incf twt ampl)
+                  (if resid
+                      (map-array-into resid (lambda (r s)
+                                              (coerce
+                                               ;; (+ r (* mag (/ s ampl)))
+                                               (+ r s)
+                                               'single-float))
+                                      resid resid-img)
+                    (setf resid (map-array (lambda (r)
+                                             (coerce
+                                              ;; (* mag (/ r ampl))
+                                              r
+                                              'single-float))
+                                           resid-img)))
+                  ))
+        (map-array-into resid (um:rcurry #'/ (coerce twt 'single-float)) resid)
+        ;; Show weighted mean, amplitude normalized, residual image
+        ;; in the sense (Star - Gaussian).
+        (plt:window 'resid)
+        (plt:tvscl 'resid resid
+                   :clear t
+                   :title "Mean Normalized Resid"
+                   :vflip t
+                   :magn 16)
+        (let ((xs (map 'vector (um:rcurry #'- radius)
+                       (vm:framp (+ radius radius 1)))
+                  ))
+          (plt:plot 'residx xs (array-row resid radius)
+                    :clear t
+                    :thick 2
+                    :title "Mean Normalized Resid"
+                    :xtitle "Position [pix]"
+                    :ytitle "Amplitude"
+                    :yrange '(-0.11 0.11)
+                    :legend "X Cut")
+          (plt:plot 'residx xs (reverse (array-col resid radius))
+                    :thick 2
+                    :color :red
+                    :legend "Y Cut"))
+        (values ;; sigma
+                (list sigma1 sigma2 theta)
+                ;; (list alpha beta)
+                prof
+                #|
+                (create-profile (map-array #'+ (fake-krnl prof) resid)
+                                radius
+                                sigma)
+                |#
+                resid)
+        ))))
 
 #|
 (improve-sigma *saved-img*)
+(setf *fake-star-130* nil)
 (with-seestar
   (setf *saved-img* (photom)))
+(with-img *saved-img*
+  (measure-stars *saved-img*))
+;; Perim = 2*(2r+1) + 2(2r+1-2) = 8r
 |#
 
 ;; --------------------------------------------------------------------------
@@ -476,9 +577,17 @@
                                   )))
                           )))))
 
+(defun conj* (z1 z2)
+  (* (conjugate z1) z2))
+
 (defun make-himg (img)
-  ;; Convolve the image array with a Gaussian kernel.
-  ;; Return the convolved image array.
+  ;; Cross-correlate the image array with a Gaussian kernel.
+  ;; Return the correlation image array.
+  ;;
+  ;; - Because of the way we construct the kernel, by least-squares
+  ;; matching to an average bright star, we need to cross-correlate
+  ;; that kernal with the image, *not* convolve. We are constructing a
+  ;; matched filter. Hence the use of CONJ* instead of * below.
   (let+ ((arr       (img-arr img))
          ( (ht wd)  (array-dimensions arr))
          (box       (make-box-of-array arr))
@@ -500,7 +609,7 @@
     (implant-subarray kwrk-arr krnl 0 0)
     (let+ ((fimg  (fft2d:fwd wrk-arr))
            (fkrnl (fft2d:fwd (vm:shift kwrk-arr `(,(- kradius) ,(- kradius)))))
-           (ffilt (map-array #'* fkrnl fimg))
+           (ffilt (map-array #'conj* fkrnl fimg))
            (chimg (fft2d:inv ffilt))
            (harr  (make-image-array ht wd)))
       (map-array-into harr #'realpart (extract-subarray chimg box))
@@ -522,7 +631,13 @@
 (show-img 'img *saved-img*)
 (phot-limit *saved-img*)
 
-(setf *sub* (img-slice *saved-img* 540 960 400))
+(defvar *qref*)
+(setf *qref* (img-slice *saved-img* 610 1075 300))
+(measure-stars *qref*)
+(show-img 'qref *qref*)
+(report-stars *qref*)
+
+(setf *sub* (img-slice *saved-img* 502 691 300))
 (measure-stars *sub*)
 (show-img 'sub *sub*)
 (report-stars *sub*)
@@ -736,15 +851,16 @@
           5)
       ;; Don't bother doing this unless at least 5 stars to base on
       (progn
+        (format t "~%~D initial stars" (length stars0))
         (setf (img-stars img) stars0)
         (let+ ((prof       (img-fake-star img))
                (sigma0     (fake-sigma prof))
+               (_          (format t "~%initial sigma ~6,4F" sigma0))
                (radius     (fake-radius prof))
-               (fit-parms  (improve-sigma img :initial-sigma sigma0 :radius radius))
-               (new-sigma  (aref fit-parms 0))
-               (new-prof   (make-gaussian-fake-star :sigma new-sigma :radius radius)))
+               (:mvb (new-sigma new-prof) (improve-sigma img :fit-args sigma0 :radius radius)))
           (format t "~%Improved sigma: ~6,4F" new-sigma)
-          (setf (img-fake-star img) new-prof)
+          (setf (img-fake-star img) new-prof
+                (img-s0sq img)      (s0sq img))
           (find-stars img thresh)
           ))
     ;; else
@@ -758,6 +874,7 @@
           (img-stars img)  stars
           (img-thr   himg) thresh
           (img-stars himg) stars)
+    (format t "~%~D stars found" (length stars))
     (let* ((snrs  (map 'vector #'star-snr stars))
            (pc25  (vm:percentile snrs 25))
            (pc75  (vm:percentile snrs 75)))
