@@ -107,7 +107,7 @@
     (let+ ((img (extract-image path chan))
            (s0sq (s0sq img)))
       (setf (img-s0sq img) s0sq)
-      (when (> (reduce #'max (vm:make-overlay-vector (img-arr img))) 65000)
+      (when (> (reduce #'max (vm:make-overlay-vector (img-arr img))) 62000)
         (warn "Image likely contains blown-out saturated stars"))
       (measure-stars img)
       (show-img 'img img)
@@ -838,13 +838,6 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
               :symbol :cross)
     
     (phot-limit img)
-    (plt:plot 'phot-limit (mapcar #'star-mag stars)
-              (mapcar #'star-snr stars)
-              :color  :red
-              :symbol :cross
-              :alpha  0.4
-              :legend "Detected Stars")
-
     (format t "~%Count  Star Pos       Mag   SNR    CoreSum     BG    SD")
     (format t "~%         X    Y")
     (format t "~%---------------------------------------------------------")
@@ -979,7 +972,8 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
     ))
             
 (defun phot-limit (img)
-  (let* ((nf-sigma (sqrt (img-s0sq img))))
+  (let* ((nf-sigma (sqrt (img-s0sq img)))
+         (dom      '(7 18)))
     (labels ((inv-mag (x)
                (expt 10.0 (* -0.4 (- x (img-mag-off img)))))
              (nf (flux nf)
@@ -990,7 +984,7 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
       ;; Noise free situation, sigma = Sqrt(Flux). So min 5σ flux is 25 du.
       ;; Theoretical statistical limit 5σ should = MagOffset - 2.5 Log10(25)
       ;;                                         = MagOffset - 3.49
-      (plt:fplot 'phot-limit '(7 18) (um:rcurry #'snr 0)
+      (plt:fplot 'phot-limit dom (um:rcurry #'snr 0)
                  :clear t
                  :thick 1
                  :ylog  t
@@ -999,13 +993,22 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
                  :xtitle "Star Magnitude [mag]"
                  :ytitle "SNR [σ]"
                  :legend "No Noise")
-      (plt:fplot 'phot-limit '(7 18) (um:rcurry #'snr nf-sigma)
+      (plt:fplot 'phot-limit dom (um:rcurry #'snr nf-sigma)
                  :thick 2
                  :legend (format nil "Noise Floor 1σ = ~4,1Fdu" nf-sigma))
-      (plt:plot 'phot-limit '(7 18) '(5 5)
+      (plt:plot 'phot-limit dom '(5 5)
                 :color :gray50
                 :thick 3
                 :legend "5σ Limit")
+      (let ((stars (img-stars img)))
+        (when stars
+          (plt:plot 'phot-limit (mapcar #'star-mag stars)
+                    (mapcar #'star-snr stars)
+                    :color  :red
+                    :symbol :cross
+                    :alpha  0.4
+                    :legend "Detected Stars")
+          ))
       )))
 
 #|

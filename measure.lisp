@@ -51,7 +51,7 @@
          (pk           (aref arr yc xc)))
     (format t "~%Cursor position ~D, ~D" x y)
     (format t "~%Peak position   ~D, ~D (~@D,~@D)" xc yc (- xc x) (- yc y))
-    (when (> pk 65000)
+    (when (> pk 62000)
       (format t "~%!! Star likely blown !!"))
     (if (plusp ampl)
         (let+ ((tnoise (sqrt (+ ampl s0sq)))
@@ -791,6 +791,22 @@
         ))
     ))
 
+(defun show-crosscuts (img star)
+  (let+ ((x   (star-x star))
+         (y   (star-y star))
+         (arr (extract-subarray (img-arr img) (make-box-of-radius x y 20)))
+         (xs  (vm:bipolar-framp 41)))
+    (plt:plot 'crosscuts (array-row arr 20)
+              :clear t
+              :title "Image Cross Cuts"
+              :thick 2
+              :legend "X")
+    (plt:plot 'crosscuts (array-col arr 20)
+              :thick 2
+              :color :red
+              :legend "Y")
+    ))
+
 (defun star-explain (img)
   ;; mouse left-click on star or region puts up a popup containing all the details...
   ;; If Shift-click, then gives us a chance to recal the magnitude scale.
@@ -804,12 +820,14 @@
       (when (star-p ans)
         (case gspec
           (:SHIFT  (mp:funcall-async #'recal img ans))
+          (t
+           (mp:funcall-async #'show-crosscuts img ans))
           ))
       txt)))
 
 ;; ---------------------------------------------------------------
 
-(defun show-img (pane img &key binarize)
+(defun show-img (pane img &key binarize level)
   ;; Show an img o a pane. Optional binarize.
   ;; Default is linear z scaling from Median to Median + 15*MAD ≈ 10σ
   ;; Binarize is hi contrast at 0 and 5σ levels.
@@ -829,6 +847,10 @@
                                 (if (>= x mad5) hi lo))
                               arr))
         ))
+    (when level
+      (let+ ((flux (inv-magn img level)))
+        (setf lo (+ med (truncate flux 2))
+              hi (+ med (round flux)))))
     (plt:window pane :xsize xsize :ysize ysize)
     (plt:tvscl pane arr
                :clear  t
