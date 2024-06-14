@@ -69,18 +69,9 @@
 (defun make-masked-array (arr &optional box)
   (let ((bits (make-array (array-dimensions arr)
                           :element-type 'bit
-                          :initial-element 1)))
+                          :initial-element (if box 0 1))))
     (when box
-      (loop for iy from 0 below (box-top box) do
-            (let ((vec (array-row bits iy)))
-              (fill vec 0)))
-      (loop for iy from (box-bottom box) below (array-dimension bits 0) do
-              (let ((vec (array-row bits iy)))
-                (fill vec 0)))
-      (loop for iy from (box-top box) below (box-bottom box) do
-            (let ((vec (array-row bits iy)))
-              (fill vec 0 :end (box-left box))
-              (fill vec 0 :start (box-right box)))))
+      (fill-array-in-box bits box 1))
     (%make-masked-array arr bits)
     ))
 
