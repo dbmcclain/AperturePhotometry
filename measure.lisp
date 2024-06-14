@@ -31,7 +31,7 @@
          (s0sq         (img-s0sq img))
          (nsigma       (img-thr img))
          (srch-box     (make-box-of-radius x y srch-radius))
-         (:mvb (yc xc) (max-array-pos-in-box harr srch-box))
+         (:mvb (yc xc) (array-max-pos-in-box harr srch-box))
          (ampl         (aref harr yc xc))
          (pk           (aref arr yc xc)))
     (format t "~%Cursor position ~D, ~D" x y)
@@ -99,6 +99,7 @@
          (zlf     (bref arr y (1+ x)))
          (zrt     (bref arr y (1- x)))
          (zfwd    (bref arr (1+ y) x)))
+    ;; Choose the largest increase for the next direction
     (if (> zlf zrt)
         (if (> zlf zfwd)
             (if (> zlf zstart)
@@ -107,6 +108,7 @@
           (if (> zfwd zstart)
               (locate-peak arr (1+ y) x)
             (values y x)))
+      ;; else - zlf <= zfwd
       (if (> zrt zfwd)
           (if (> zrt zstart)
               (locate-peak arr y (1- x))
@@ -149,112 +151,56 @@
                ))
       (zap y x)))
 
-;; ---------------------------------------------------------
-;; Aperture Photometry
-
-#|
-(defun cresting-p (arr yc xc)
-  (let ((z     (aref arr yc xc)))
-    (and
-     (>= z (aref arr (1- yc) xc))
-     (>= z (aref arr (1+ yc) xc))
-     (>= z (aref arr yc (1+ xc)))
-     (>= z (aref arr yc (1- xc)))
-     
-     (> z (aref arr (- yc 2) xc))
-     (> z (aref arr (+ yc 2) xc))
-     
-     (> z (aref arr yc (- xc 2)))
-     (> z (aref arr yc (+ xc 2)))
-     
-     (> z (aref arr (1- yc) (1- xc)))
-     (> z (aref arr (1- yc) (1+ xc)))
-     
-     (> z (aref arr (1+ yc) (1- xc)))
-     (> z (aref arr (1+ yc) (1+ xc)))
-     )))
-
-(defun ring-med (arr yc xc)
-  (let* ((ring-box  (make-box-of-radius xc yc *ring-radius*))
-         (moat-box  (make-box-of-radius xc yc *moat-radius*))
-         (seqs      nil))
-    
-    (loop for row from (box-top ring-box) below (box-top moat-box) do
-            (push (subseq (array-row arr row) (box-left ring-box) (box-right ring-box)) seqs))
-
-    (loop for row from (box-top moat-box) below (box-bottom moat-box) do
-            (let ((vec  (array-row arr row)))
-              (push (subseq vec (box-left ring-box) (box-left moat-box)) seqs)
-              (push (subseq vec (box-right moat-box) (box-right ring-box)) seqs)))
-
-    (loop for row from (box-bottom moat-box) below (box-bottom ring-box) do
-            (push (subseq (array-row arr row) (box-left ring-box) (box-right ring-box)) seqs))
-
-    (let* ((vec (apply #'concatenate 'vector seqs))
-           (med (vm:median vec))
-           (mad (vm:mad vec med)))
-      (values med mad)
-      )))
-
-#|
-(let ((arr (make-array '(23 23)
-                       :element-type 'single-float
-                       :initial-element 1f0)))
-  (inspect (multiple-value-list (ring-med arr 11 11))))
-|#
-
-(defun find-stars (ref-img &optional (thresh 5))
-  ;; thresh in sigma units
-  (let+ ((ref-arr     (img-arr ref-img))
-         (core-radius (img-core ref-img))
-         (core-width  (1+ (* 2 core-radius)))
-         (med         (img-med ref-img))
-         (mad         (img-mad ref-img))
-         (nsigma      thresh)
-         (thr         (+ med (* (sd-to-mad nsigma) mad)))
-         (ref-box     (inset-box (make-box-of-array ref-arr) *ring-radius* *ring-radius*))
-         (srch-arr    (make-masked-array ref-arr ref-box)))
-    (loop for mult in '(100 50 25 12 6 1) nconc
-            ;; peel off from bright to faint, to avoid chasing a
-            ;; target that is successively eroded before we reach
-            ;; it...
-            (loop for y from (box-top ref-box) below (box-bottom ref-box) nconc
-                    (loop for x from (box-left ref-box) below (box-right ref-box) nconc
-                            (when (>= (aref srch-arr y x) (* mult thr))
-                              (let+ ((:mvb (yc xc)   (locate-peak srch-arr ref-box y x))
-                                     (_              (zap-peak srch-arr ref-box yc xc thr))
-                                     (:mvb (med mad) (ring-med ref-arr yc xc))
-                                     (box  (make-box-of-radius xc yc core-radius))
-                                     (core (- (sum-array ref-arr box)
-                                              (* med (box-area box)))))
-                                (when (plusp core)
-                                  (let* ((poisson (sqrt core))
-                                         (sd      (* +mad/sd+ mad core-width))
-                                         (noise   (abs (complex sd poisson)))
-                                         (snr     (/ core noise)))
-                                    (when (>= snr nsigma)
-                                      `(,(make-star
-                                          :x    xc
-                                          :y    yc
-                                          :mag  (magn ref-img core)
-                                          :snr  snr
-                                          :core core
-                                          :sd   sd))
-                                      )))))
-                          )))))
 ;; ------------------------------------------------------------------
-;; Fitted Photometry - assume a Gaussian core model + Background level
-;; As per Stetson & DAOPHOT.
-|#
+;; Fitted Photometry - Assume an Adaptive Elliptical Bivariate
+;; Gaussian Core model + Background level, as per Stetson & DAOPHOT.
+;; Major and minor axis sigmas, and angle of major axis of Ellipse,
+;; are least-squares fitted values, using brighter stars to guide the
+;; fitting. Angle measured with respect to the sensor grid.
+
 ;; --------------------------------------------------------------------
 ;; Least-squares fitting to Gaussian core + BG
 ;;
 ;;   I(i,j) = A*G(i,j; σ) + B
-;;
+;;                                                                          Using Einstein summation conv.
 ;;   Δ = N * Σ[G(i,j; σ)^2] - (Σ[G(i,j;σ)])^2                             = N G^2_ii - G_ii^2 > 0
-;;   A = (N * Σ[I(i,j)*G(i,j;σ)] - Σ[G(i,j;σ)] * Σ[I(i,j)])/Δ             = (N I_ij G_ij - G_ii I_ii)/Δ 
+;;   A = (N * Σ[I(i,j)*G(i,j;σ)] - Σ[G(i,j;σ)] * Σ[I(i,j)])/Δ             = (N I_ij G_ij - G_ii I_ii)/Δ
 ;;   B = (Σ[G(i,h;σ)^2] * Σ[I(i,j)] - Σ[G(i,j;σ)] * Σ[I(i,j)*G(i,j;σ)])/Δ = (G^2_ii I_jj - G_kk G_ij I_ij)/Δ
 ;;
+;;   Evan more succinct in Bra-Ket notation:
+;;   Σ[G^2] = <G|G>
+;;   Σ[G]   = <G|1>, for 1 = a filled array of 1, <1|1> = N.
+;;                   Inner prod defined as dot prod between vectors,
+;;                   where vectors are row-major access arrays.
+;;                   So the entire Gaussian kernel array can be seen as
+;;                   a column vector in row-major order.
+;;
+;;  Treat <X| as a row-vector, and |X> as a column vector.
+;;  G is the Gaussian kernel, I is the image of a star.
+;;
+;;   Then:
+;;   Δ = N <G|G> - <G|1>^2 > 0,        Proof that Δ > 0? <G|G> and <1|1> are the squared lengths
+;;   A = (N <G|I> - <G|1><I|1>)/Δ      of two non-colinear vectors in N-space. Their product is obviously 
+;;   B = (<G|G><I|1> - <G|1><G|I>)/Δ   greater than the square of their common projected sub-vector length.
+;;
+;;   If we define angle Θ from <G|1> = |G|.|1|.cosΘ, where . = ordinary multiplication,
+;;   Then Δ = |G|^2.|1|^2.(1 - (cosΘ)^2) > 0, unless Θ = 0 or π.
+;;
+;; Define correlation image <G'| = <G| - <G|1>/N <1|, then <G'|1> = 0, since <1|1> = N.
+;; IOW, <G'| is the orthogonal component of <G| to <1|.
+;; <1| is the everything correlator. It filters nothing, and simply causes a sum over all pixels.
+;;
+;; Then with <G'| we get:
+;;
+;;   |I> = A'.|G'> + B'.|1> + |eps>, with |eps| << 1 noise, |G'> and |1> orthogonal, <G'|1> = 0.
+;;   Ideally, <eps|eps> = |eps|.δ(i,j), <eps|X> ≈ 0 to first order, for any |X>. But this won't really hold
+;;   unless the star images are truly Gaussians. 
+;;
+;;   Δ' = N <G'|G'>
+;;   A' = N <G'|I>/Δ' = <G'|I>/<G'|G'>, a measure of similarity or anti-similarity between <G'| and <I|.
+;;   B' = <G'|G'><I|1>/Δ' = <I|1>/N = average of image flux spread out over all the pixel.
+;;
+;; --------------------------------------------------------------------------------------------
 ;;   Noise Variance in star-free region, given SD for image: (= 1.4826 * MAD)
 ;;
 ;;      S0^2_meas = N SD^2 / Δ
@@ -430,66 +376,6 @@
 
 ;; --------------------------------------------------------------------------
 
-#|
-(defun prep-kernel (ref-img)
-  ;; Precompute the geometric quantities based solely on the detailed
-  ;; shape of the Gaussian kernel.
-  (let+ ((fake-star   (first (img-fake-star ref-img)))
-         (ksum        (vm:total fake-star))
-         (k2sum       (vm:total (map-array #'* fake-star fake-star)))
-         (npix        (array-total-size fake-star))
-         (Δ           (- (* npix k2sum)
-                         (sqr ksum)))
-         (prof        `(,fake-star ,Δ ,npix ,ksum ,k2sum))
-         (mad         (img-mad ref-img))
-         (sd          (* mad +mad/sd+))      ;; image noise floor SD from measured image MAD
-         (s0sq        (/ (* npix sd sd) Δ))) ;; expected noise from a star-free field.
-    (values prof s0sq)))
-|#
-#|
-(defun find-stars (ref-img &optional (thresh 5))
-  ;; thresh in sigma units
-  ;; Find and measure stars in the image.
-  (let+ ((ref-arr     (img-arr ref-img))
-         (krnl        (img-fake-star ref-img))
-         (s0sq        (img-s0sq ref-img))
-         (nsigma      thresh)
-         (med         (img-med ref-img))
-         (mad         (img-mad ref-img))
-         (sd          (* mad +mad/sd+))
-         (thr         (+ med (* nsigma sd)))
-         (ring-radius (fake-radius krnl))
-         (srch-box    (inset-box (make-box-of-array ref-arr) ring-radius ring-radius))
-         (srch-arr    (make-masked-array ref-arr srch-box)))
-    (loop for mult in '(200 100 50 25 12 6 1)
-          for mult-thr = (* mult thr)
-          nconc
-            ;; peel off from bright to faint, to avoid chasing a
-            ;; target that is successively eroded before we reach
-            ;; it...
-            (loop for y from (box-top srch-box) below (box-bottom srch-box) nconc
-                    (loop for x from (box-left srch-box) below (box-right srch-box) nconc
-                            (when (>= (bref srch-arr y x) mult-thr)
-                              (let+ ((:mvb (yc xc)   (locate-peak srch-arr y x))
-                                     ;; (_              (zap-peak srch-arr yc xc thr))
-                                     (:mvb (ampl bg) (measure-flux ref-arr yc xc krnl)))
-                                (when (plusp ampl)
-                                  (let+ ((tnoise (sqrt (+ ampl s0sq)))
-                                         (snr    (/ ampl tnoise)))
-                                    (when (>= snr nsigma)
-                                      (zap-peak srch-arr yc xc thr)
-                                      `(,(make-star
-                                          :x    xc
-                                          :y    yc
-                                          :mag  (magn ref-img ampl)
-                                          :snr  snr
-                                          :core ampl
-                                          :bg   (- bg med)
-                                          :sd   tnoise))
-                                      )))))
-                          )))))
-|#
-
 (defun find-stars (ref-img &optional (thresh 5))
   ;; thresh in sigma units
   ;; Find and measure stars in the image.
@@ -534,12 +420,18 @@
 
 (defun make-himg (img)
   ;; Cross-correlate the image array with a Gaussian kernel.
-  ;; Return the correlation image array.
+  ;; Return the correlation image.
+  ;;
+  ;; Convolution? Correlation? With a symmetric kernel there is no
+  ;; difference. But after fitting to become a non- cylindrically
+  ;; symmetric kernel, it makes a difference.
   ;;
   ;; - Because of the way we construct the kernel, by least-squares
   ;; matching to an average bright star, we need to cross-correlate
-  ;; that kernal with the image, *not* convolve. We are constructing a
-  ;; matched filter. Hence the use of CONJ* instead of * below.
+  ;; that kernel with the image, *not* convolve. We are constructing a
+  ;; matched filter. Hence, correlation and the use of CONJ* instead
+  ;; of * below.
+  ;;
   (let+ ((arr       (img-arr img))
          ( (ht wd)  (array-dimensions arr))
          (box       (make-box-of-array arr))
@@ -552,6 +444,7 @@
          (npix      (fake-npix prof))
          (mnf       (/ ksum npix))
          (norm      (/ Δ npix))
+         ;; Construct the <G'| matrix
          (krnl      (map-array (lambda (x)
                                  (/ (- x mnf) norm))
                                (fake-krnl prof)))
@@ -559,6 +452,7 @@
          (kwrk-arr  (make-image-array htx wdx :initial-element 0f0)))
     (implant-subarray wrk-arr arr 0 0)
     (implant-subarray kwrk-arr krnl 0 0)
+    ;; FT of a correlation is the conj prod of their FT's
     (let+ ((fimg  (fft2d:fwd wrk-arr))
            (fkrnl (fft2d:fwd (vm:shift kwrk-arr `(,(- kradius) ,(- kradius)))))
            (ffilt (map-array #'conj* fkrnl fimg))
@@ -576,6 +470,7 @@
         himg
         ))))
 
+;; --------------------------------------------------------------------------
 #|
 (with-seestar
   (setf *saved-img* (photom)))

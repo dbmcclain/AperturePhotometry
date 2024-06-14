@@ -78,11 +78,11 @@
   ;; position of max value in vector
   (position (reduce #'max vec) vec))
 
-(defun max-array-pos (arr)
+(defun array-max-pos (arr)
   ;; 2D index location of max value in array
   (pos-in-array arr #'max-pos))
 
-(defun max-array-pos-in-box (arr box)
+(defun array-max-pos-in-box (arr box)
   (pos-in-box arr box #'max-pos))
 
 
