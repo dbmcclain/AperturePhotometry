@@ -349,6 +349,9 @@
 
 ;; -------------------------------------------------------------
 
+(defun rtod (x)
+  (* x (/ 45f0 (atan 1f0))))
+
 (defun improve-sigma (img &key fit-args (radius 7))
   (let+ ((stars   (remove-if (lambda (star)
                                ;; Improvements will be based on stars
@@ -357,14 +360,7 @@
                                  (or (< mag  8.0)
                                      (> mag 11.5))
                                  ))
-                             (img-stars img)))
-         #||#
-         (radj   (let ((xs  (vm:bipolar-framp (+ 1 radius radius))))
-                   (map-array (lambda (x)
-                                (/ (max 1f0 (sqrt (* 6.28f0 (abs x))))))
-                              (vm:outer-prod xs xs))))
-         #||#
-         )
+                             (img-stars img))))
     (format t "~%~D stars selected to guide improvement" (length stars))
     (labels ((quality-sum (vec)
                (let+ ((prof  (make-gaussian-elliptical-fake-star
@@ -373,36 +369,25 @@
                               :theta  (aref vec 2)
                               :radius radius)))
                  (loop for star in stars sum
-                         (let+ ((:mvb (ampl _ resid-img)
+                         (let+ ((:mvb (_ _ resid-img)
                                     (measure-flux (img-arr img) (star-y star) (star-x star) prof)))
                            (vm:total
-                            ;; Squared Gaussian weighted, amplitude
-                            ;; normalized, deviations between core
+                            ;; Squared deviations between core
                             ;; model and star profile,
-                            (map-array (lambda (resid-val gval)
+                            (map-array (lambda (resid-val)
                                          (coerce
-                                          (sqr (* ;; gval
-                                                  ;; (/ resid-val ampl)
-                                                  resid-val
-                                                  ))
+                                          (sqr resid-val)
                                           'single-float))
-                                       ;; (map-array #'* resid-img radj)
-                                       resid-img
-                                       (fake-krnl prof)))
-                           )))))
+                                       resid-img))
+                           ))
+                 )))
       (let+ ((:mvb (vfit _ niter)
                  (vm:simplex #'quality-sum (apply #'vector fit-args)))
-             ;; (sigma   (aref vfit 0))
              (sigma1  (aref vfit 0))
              (sigma2  (aref vfit 1))
              (theta   (aref vfit 2))
-             ;; (alpha  (aref vfit 0))
-             ;; (beta   (aref vfit 1))
-             ;; (_  (format t "~%~D iters, alpha = ~6,4F, beta = ~6,4F" niter alpha beta))
-             
-             (_  (format t "~%~D iters, σ1 = ~6,4F, σ2 = ~6,4F, Θ = ~6,4F" niter sigma1 sigma2 theta))
-             ;; (_  (format t "~%~D iters, sigma = ~6,4F" niter sigma))
-             ;; (prof    (make-moffat-fake-star :alpha alpha :beta beta :radius radius))
+             (_  (format t "~%~D iters, σ1 = ~6,4F, σ2 = ~6,4F, Θ = ~6,4F (~6,4F deg)"
+                         niter sigma1 sigma2 theta (rtod theta)))
              (prof    (make-gaussian-elliptical-fake-star
                        :sigma1 sigma1
                        :sigma2 sigma2
@@ -412,22 +397,14 @@
              (resid   nil))
         (loop for star in stars do
                 (let+ ((:mvb (ampl _ resid-img)
-                           (measure-flux (img-arr img) (star-y star) (star-x star) prof))
-                       (mag  (star-mag star)))
-                  ;; (incf twt mag)
+                           (measure-flux (img-arr img) (star-y star) (star-x star) prof)))
                   (incf twt ampl)
                   (if resid
                       (map-array-into resid (lambda (r s)
-                                              (coerce
-                                               ;; (+ r (* mag (/ s ampl)))
-                                               (+ r s)
-                                               'single-float))
+                                              (coerce (+ r s) 'single-float))
                                       resid resid-img)
                     (setf resid (map-array (lambda (r)
-                                             (coerce
-                                              ;; (* mag (/ r ampl))
-                                              r
-                                              'single-float))
+                                             (coerce r 'single-float))
                                            resid-img)))
                   ))
         (map-array-into resid (um:rcurry #'/ (coerce twt 'single-float)) resid)
@@ -454,15 +431,8 @@
                     :thick 2
                     :color :red
                     :legend "Y Cut"))
-        (values ;; sigma
-                (list sigma1 sigma2 theta)
-                ;; (list alpha beta)
+        (values (list sigma1 sigma2 theta)
                 prof
-                #|
-                (create-profile (map-array #'+ (fake-krnl prof) resid)
-                                radius
-                                sigma)
-                |#
                 resid)
         ))))
 
@@ -792,18 +762,27 @@
     ))
 
 (defun show-crosscuts (img star)
-  (let+ ((x   (star-x star))
-         (y   (star-y star))
-         (arr (extract-subarray (img-arr img) (make-box-of-radius x y 20)))
-         (xs  (vm:bipolar-framp 41)))
-    (plt:plot 'crosscuts (array-row arr 20)
+  (let+ ((x    (star-x star))
+         (y    (star-y star))
+         (arr  (extract-subarray (img-arr img) (make-box-of-radius x y 20)))
+         (xs   (vm:bipolar-framp 41))
+         (hs   (array-row arr 20))
+         (vs   (array-col arr 20))
+         (lo   (* 10 (1- (floor (min (reduce #'min hs) (reduce #'min vs)) 10))))
+         (hi   (* 10 (1+ (ceiling (max (reduce #'max hs) (reduce #'max vs)) 10)))))
+    (plt:plot 'crosscuts xs hs
               :clear t
               :title "Image Cross Cuts"
               :thick 2
+              :line-type :histo
+              :yrange `(,lo ,hi)
+              :alpha 0.5
               :legend "X")
-    (plt:plot 'crosscuts (array-col arr 20)
+    (plt:plot 'crosscuts xs vs
               :thick 2
               :color :red
+              :alpha 0.5
+              :line-type :histo
               :legend "Y")
     ))
 
@@ -811,7 +790,7 @@
   ;; mouse left-click on star or region puts up a popup containing all the details...
   ;; If Shift-click, then gives us a chance to recal the magnitude scale.
   (lambda (xc yc x y gspec)
-    (declare (ignore x y))
+    (declare (ignore x y))  ;; these are prior click positions
     (let* ((ans nil)
            (txt (with-output-to-string (s)
                   (let ((*standard-output* s))
@@ -823,7 +802,8 @@
           (t
            (mp:funcall-async #'show-crosscuts img ans))
           ))
-      txt)))
+      txt  ;; needs to return the text to display in a popup
+      )))
 
 ;; ---------------------------------------------------------------
 

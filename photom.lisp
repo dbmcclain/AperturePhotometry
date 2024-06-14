@@ -1102,7 +1102,7 @@ x 459.  y 219.
                        :zlog t))
           )))))
 (tst)
-|#
+
 (defun tst ()
   (let+ ((arr (img-arr *sub*))
          (med (img-med *sub*))
@@ -1139,7 +1139,7 @@ x 459.  y 219.
                    :flipv t
                    :zrange `(,med ,(+ med (* 30 mad))))
         ))))
-#|
+
 (tst)
 
  |#
