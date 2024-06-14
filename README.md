@@ -98,7 +98,7 @@ Single 10s exposure images show typical limits around 14.5 mag. 1 minute stacks 
 
 However, what we have implemented matches just the star detection front end of DAOPHOT. The rest of DAOPHOT performs a much more rigorous teasing apart of crowded star groups and does multi-star simultaneous fitting against semi-empirical model PSF's. It is indeed the Cadillac system for study of crowded star fields. For the moment I have no intention of proceeding any further. This was intended to be a quick and dirty system for scanning, mostly amateur, images.
 
-Checking against AAVSO star charts shows that we are already getting better accuracy than the charts report. Our measured magnitudes are ±0.07 mag of AAVSO numbers. (And as a result, we should be using 13.2 mag for 3C273).
+Checking against AAVSO star charts shows that we are already getting better precision than the charts report. Our measured magnitudes are ±0.07 mag of AAVSO numbers. (And as a result, we should be using 13.2 mag for 3C273).
 
 See also these pages: 
   - https://www.astrobin.com/59avk7/B/
