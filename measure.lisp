@@ -777,13 +777,35 @@
         
 ;; ---------------------------------------------------------------
 
+(defun recal (img star)
+  ;; Give user a chance to recal the magnitude scale.
+  (let ((ans (capi:prompt-for-number "Enter desired magnitude"
+                                     :initial-value (star-mag star))
+             ))
+    (when ans
+      (let ((adj  (- ans (star-mag star))))
+        (incf (img-mag-off img) adj)
+        (dolist (s (img-stars img))
+          (incf (star-mag s) adj))
+        (phot-limit img)
+        ))
+    ))
+
 (defun star-explain (img)
-  (lambda (xc yc &rest ignored)
-    (declare (ignore ignored))
-    (with-output-to-string (s)
-      (let ((*standard-output* s))
-        (measure-location img (round xc) (round yc)))
-      )))
+  ;; mouse left-click on star or region puts up a popup containing all the details...
+  ;; If Shift-click, then gives us a chance to recal the magnitude scale.
+  (lambda (xc yc x y gspec)
+    (declare (ignore x y))
+    (let* ((ans nil)
+           (txt (with-output-to-string (s)
+                  (let ((*standard-output* s))
+                    (setf ans (measure-location img (round xc) (round yc)))))
+                ))
+      (when (star-p ans)
+        (case gspec
+          (:SHIFT  (mp:funcall-async #'recal img ans))
+          ))
+      txt)))
 
 ;; ---------------------------------------------------------------
 
