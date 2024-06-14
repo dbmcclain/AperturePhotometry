@@ -33,7 +33,7 @@
   (copy-array-into (apply #'make-image-array (array-dimensions arr))
                    arr fn))
 
-(defun fill-array-in-box (arr box val)
+(defun array-fill-in-box (arr box val)
   (let* ((lf  (box-left box))
          (wd  (box-width box)))
     (loop for row from (box-top box) below (box-bottom box) do
@@ -43,7 +43,7 @@
             (fill vec val))
             )))
 
-(defun fill-array (arr val)
+(defun array-fill (arr val)
   (fill (vec arr) val)
   arr)
 

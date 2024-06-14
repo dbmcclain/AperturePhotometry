@@ -81,7 +81,7 @@
   himg)
 
 (defstruct star
-  x y mag snr core bg sd)
+  x y mag snr core sd)
 
 (defstruct fake
   krnl Δ npix ksum k2sum radius sigma box)
@@ -838,9 +838,9 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
               :symbol :cross)
     
     (phot-limit img)
-    (format t "~%Count  Star Pos       Mag   SNR    CoreSum     BG    SD")
+    (format t "~%Count  Star Pos       Mag   SNR    CoreSum      SD")
     (format t "~%         X    Y")
-    (format t "~%---------------------------------------------------------")
+    (format t "~%---------------------------------------------------")
     (loop for star in (sort (img-stars img) #'< :key sort-key)
           for ct from 1
           do
@@ -849,15 +849,13 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
                              (mag  star-mag)
                              (snr  star-snr)
                              (core star-core)
-                             (bg   star-bg)
                              (sd   star-sd)) star
-              (format t "~%~3D   ~4D ~4D    ~6,2F  ~6,1F  ~7D  ~5D  ~6,1F"
+              (format t "~%~3D   ~4D ~4D    ~6,2F  ~6,1F  ~7D  ~6,1F"
                       ;; crude mag adj based on 3c273
                       ct
                       x y
                       mag (float snr 1.0)
                       (round core)
-                      (round bg)
                       sd)
               ))))
 

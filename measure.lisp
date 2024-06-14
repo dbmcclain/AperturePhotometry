@@ -51,7 +51,6 @@
                       :mag  (magn img ampl)
                       :snr  snr
                       :core ampl
-                      :bg   med ;; for lack of something better to put here
                       :sd   tnoise))
             (format t "~%Failed: Sum below threshold:~%   Mag ≈ ~4,1F  SNR ≈ ~3,1F"
                     (magn img ampl) snr)))
@@ -71,7 +70,7 @@
                           :element-type 'bit
                           :initial-element (if box 0 1))))
     (when box
-      (fill-array-in-box bits box 1))
+      (array-fill-in-box bits box 1))
     (%make-masked-array arr bits)
     ))
 
@@ -410,7 +409,6 @@
                                       :mag  (magn ref-img ampl)
                                       :snr  snr
                                       :core ampl
-                                      :bg   med ;; just to fill it with something, since we don't have bg here
                                       :sd   tnoise))
                                   )))
                           )))))
