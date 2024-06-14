@@ -647,8 +647,10 @@
          (hi   (* 10 (1+ (ceiling (max (reduce #'max hs) (reduce #'max vs)) 10)))))
     (plt:plot 'crosscuts xs hs
               :clear t
-              :title "Image Cross Cuts"
-              :thick 2
+              :title  "Image Cross Cuts"
+              :xtitle "Pixel Position"
+              :ytitle "Image Amplitude [du]"
+              :thick  2
               :line-type :histo
               :yrange `(,lo ,hi)
               :alpha 0.5
@@ -671,12 +673,18 @@
                   (let ((*standard-output* s))
                     (setf ans (measure-location img (round xc) (round yc)))))
                 ))
-      (when (star-p ans)
-        (case gspec
-          (:SHIFT  (mp:funcall-async #'recal img ans))
-          (t
-           (mp:funcall-async #'show-crosscuts img ans))
-          ))
+      (case gspec
+        (:SHIFT
+         (when (star-p ans)
+           (mp:funcall-async #'recal img ans)))
+        (t
+         (let ((star (if (star-p ans)
+                         ans
+                       (make-star
+                        :x  (round xc)
+                        :y  (round yc)
+                        ))))
+           (mp:funcall-async #'show-crosscuts img star))))
       txt  ;; needs to return the text to display in a popup
       )))
 
