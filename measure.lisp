@@ -232,7 +232,7 @@
     (let+ ((box    (move-box box (- x radius) (- y radius)))
            (star   (extract-subarray arr box))
            (ssum   (vm:total star))
-           (kssum  (vm:total (map-array #'* krnl star)))
+           (kssum  (vm:inner-prod krnl star))
            (ampl   (/ (- (* npix kssum)
                          (* ksum ssum))
                       Δ))
@@ -684,7 +684,7 @@
 
 ;; ---------------------------------------------------------------
 
-(defun show-img (pane img &key binarize level)
+(defun show-img (pane img &key level)
   ;; Show an img o a pane. Optional binarize.
   ;; Default is linear z scaling from Median to Median + 15*MAD ≈ 10σ
   ;; Binarize is hi contrast at 0 and 5σ levels.
@@ -698,16 +698,18 @@
          (xsize  (round (* wd sf)))
          (ysize  (round (* ht sf))))
     (print `(:scale ,sf))
-    (when binarize
+    (cond
+     ((eq level :binary)
       (let ((mad5 (+ med (* (sd-to-mad (img-thr img)) mad))))
         (setf arr  (map-array (lambda (x)
                                 (if (>= x mad5) hi lo))
                               arr))
         ))
-    (when level
+     ((realp level)
       (let+ ((flux (inv-magn img level)))
         (setf lo (+ med (truncate flux 2))
               hi (+ med (round flux)))))
+     )
     (plt:window pane :xsize xsize :ysize ysize)
     (plt:tvscl pane arr
                :clear  t
@@ -788,7 +790,7 @@
                      :xtitle "SNR"
                      :ytitle "Density")
       (plt:with-delayed-update ('himg)
-        (show-img 'himg himg :binarize nil)
+        (show-img 'himg himg)
         (hilight-stars 'himg stars :green))
       (plt:with-delayed-update ('stars)
         (show-img 'stars img)

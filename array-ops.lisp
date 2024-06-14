@@ -192,4 +192,3 @@
 (defun k/array (arr kval)
   (array-unop arr (um:curry #'/ kval)))
 
-  

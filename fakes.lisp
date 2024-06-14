@@ -76,7 +76,7 @@
 (defun create-profile (arr radius sigma)
   (let+ ((box    (make-box-of-array arr))
          (ksum   (vm:total arr))
-         (k2sum  (vm:total (map-array #'* arr arr)))
+         (k2sum  (vm:inner-prod arr arr))
          (npix   (reduce #'* (array-dimensions arr)))
          (Δ      (- (* npix k2sum)
                     (* ksum ksum))))
@@ -120,7 +120,9 @@
                   do
                     (let+ ((:mvb (r  th) (rtop x y))
                            (:mvb (xx yy) (ptor r (- th theta)))
-                           (z    (coerce (* (gaussian xx sigma1) (gaussian yy sigma2)) 'single-float)))
+                           (z    (coerce
+                                  (* (gaussian xx sigma1) (gaussian yy sigma2))
+                                  'single-float)))
                       (setf (aref arr iy ix) z))
                     ))
     (create-profile arr radius (list sigma1 sigma2 theta))))
@@ -138,7 +140,9 @@
 (defun show-fake-star (fake-star)
   (let+ ((arr    (fake-krnl fake-star))
          (radius (fake-radius fake-star))
-         (dists  (vops:voffset (- radius) (vm:framp (1+ (* 2 radius))))))
+         (dists  (vops:voffset (- radius)
+                               (vm:framp (1+ (* 2 radius)))
+                               )))
     (plt:tvscl 'fake-star arr
                :magn  16
                :zlog  t

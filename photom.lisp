@@ -1035,111 +1035,13 @@ x 459.  y 219.
 (defvar *sub*)
 (setf *sub* (img-slice *saved-img* 681 829 400))
 (measure-stars *sub* :thresh 5)
-(show-img 'img *saved-img* :binarize t)
-(show-img 'img *saved-img* :binarize nil)
-(show-img 'sub *sub* :binarize t)
-(show-img 'sub *sub* :binarize nil)
+(show-img 'img *saved-img* :level :binary)
+(show-img 'img *saved-img*)
+(show-img 'sub *sub* :level :binary)
+(show-img 'sub *sub*)
 (report-stars *sub*)
 (measure-stars *saved-img*)
 (report-stars *saved-img*)
 (phot-limit *saved-img*)
 (phot-limit *sub*)
- |#
-#|
- ;; maybe use 2D-FFT's for fast bulk filtering of some sort?
-(defun tst ()
-  (let+ ((arr (img-arr *sub*))
-         (med (img-med *sub*))
-         (mad (img-mad *sub*))
-         ( (ht wd) (array-dimensions arr))
-         (wdx (um:ceiling-pwr2 wd))
-         (htx (um:ceiling-pwr2 ht))
-         (wrk-arr (make-image-array htx wdx :initial-element 0f0)))
-    (implant-subarray wrk-arr arr 
-                      (truncate (- htx ht) 2)
-                      (truncate (- wdx wd) 2))
-    #|
-    (let ((vec (vm:make-overlay-vector wrk-arr)))
-      (map-into vec (um:rcurry #'- med) vec))
-    |#
-    (plt:window 'wrk :xsize wdx :ysize htx)
-    (plt:tvscl 'wrk (vm:shifth wrk-arr)
-               :clear t
-               :zrange `(,med ,(+ med (* 15 mad))))
-
-    ;; two ways to compute the same thing, except the first is the
-    ;; square of the second
-
-    ;; the first way
-    (let+ ((farr  (fft2d:fwd wrk-arr))
-           (fcorr (copy-array farr #'conjugate)))
-      (map-array-into fcorr #'* fcorr farr)
-      (let+ (( (nrows ncols) (array-dimensions fcorr))
-             (img  (make-image-array nrows ncols)))
-        (map-array-into img #'realpart fcorr)
-        (plt:window 'fft :xsize wdx :ysize htx)
-        (plt:tvscl 'fft (vm:shifth img)
-                   :clear t
-                   :zlog t)
-
-        ;; let's see the inverse transform of the autocorrelation spectrum
-        (let+ ((xcimg (fft2d:inv fcorr))
-               (img   (make-image-array nrows ncols)))
-          (map-array-into img #'realpart xcimg)
-          (let+ ((med (vm:median img))
-                 (mad (vm:mad img med)))
-            (plt:window 'ifft :xsize wdx :ysize htx)
-            (plt:tvscl 'ifft img
-                       :clear t
-                       :zrange `(,med ,(+ med (* 15 mad)))))
-
-          ;; the second way
-          (let+ ((farr (fft2d:fwd-magnitude wrk-arr))
-                 (img  (make-image-array nrows ncols)))
-            (plt:window 'fftm :xsize wdx :ysize htx)
-            (plt:tvscl 'fftm (vm:shifth farr)
-                       :clear t
-                       :zlog t))
-          )))))
-(tst)
-
-(defun tst ()
-  (let+ ((arr (img-arr *sub*))
-         (med (img-med *sub*))
-         ( (ht wd) (array-dimensions arr))
-         (wdx (um:ceiling-pwr2 wd))
-         (htx (um:ceiling-pwr2 ht))
-         (wrk-arr (make-image-array htx wdx :initial-element med))
-         (prof (img-fake-star *sub*))
-         (fake (copy-img-array (fake-krnl prof) (um:rcurry #'coerce 'single-float)))
-         ( (htf wdf) (array-dimensions fake))
-         (mnf  (vm:mean fake))
-         (gsq  (array*a fake fake))
-         (norm (- (vm:total gsq)
-                  (/ (sqr (vm:total fake)) (* htf wdf))))
-         (krnl (map-array (lambda (x)
-                            (/ (- x mnf) norm))
-                          fake))
-         (krnl-arr (make-image-array htx wdx :initial-element 0f0)))
-    (implant-subarray wrk-arr arr 0 0)
-    (implant-subarray krnl-arr krnl
-                      (truncate (- htx htf) 2)
-                      (truncate (- wdx wdf) 2))
-    (let+ ((fimg  (fft2d:fwd wrk-arr)) ;; (vm:shifth wrk-arr)))
-           (fkrnl (fft2d:fwd (vm:shifth krnl-arr)))
-           (ffilt (map-array #'* fkrnl fimg))
-           (chimg (fft2d:inv ffilt))
-           (himg  (make-image-array htx wdx)))
-      (map-array-into himg #'realpart chimg)
-      (let* ((med  (vm:median himg))
-             (mad  (vm:mad himg med)))
-        (plt:window 'himg :xsize wdx :ysize htx)
-        (plt:tvscl 'himg himg ;; (vm:shifth himg)
-                   :clear t
-                   :flipv t
-                   :zrange `(,med ,(+ med (* 30 mad))))
-        ))))
-
-(tst)
-
  |#
