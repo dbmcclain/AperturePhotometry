@@ -93,7 +93,7 @@
          ( (lf_i tp_i rt_i bt_i) box-inner))
     (and (<= lf_o lf_i)
          (<= tp_o tp_i)
-k         (>= rt_o rt_i)
+         (>= rt_o rt_i)
          (>= bt_o bt_i))
     ))
 
