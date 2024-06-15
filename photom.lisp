@@ -74,11 +74,12 @@
   (mag-off   *mag-offset*)
   (core      *core-radius*)
   (fake-star *fake-star*)
+  gain
   s0sq
   himg)
 
 (defstruct star
-  x y mag snr core sd)
+  x y mag snr flux sd)
 
 (defstruct fake
   krnl Δ npix ksum k2sum radius sigma box)
@@ -103,7 +104,8 @@
     (format t "~%Channel ~A:" chan)
     (let+ ((img (extract-image path chan))
            (s0sq (s0sq img)))
-      (setf (img-s0sq img) s0sq)
+      (setf (img-s0sq img) s0sq
+            (img-gain img) *gain*)
       (let ((vmax (reduce #'max (vm:make-overlay-vector (img-arr img))))) 
         (if (> vmax 62000)
             (warn "Image likely contains blown-out stars")
@@ -838,7 +840,7 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
                 :symbol :cross))
     |#
     (phot-limit img)
-    (format t "~%Count  Star Pos       Mag   SNR    CoreSum      SD")
+    (format t "~%Count  Star Pos       Mag   SNR       Flux      SD")
     (format t "~%         X    Y")
     (format t "~%---------------------------------------------------")
     (loop for star in (sort (img-stars img) #'< :key sort-key)
@@ -850,7 +852,7 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
                              (snr  star-snr)
                              (core star-core)
                              (sd   star-sd)) star
-              (format t "~%~3D   ~4D ~4D    ~6,2F  ~6,1F  ~7D  ~6,1F"
+              (format t "~%~3D   ~4D ~4D    ~6,2F  ~6,1F  ~7,2G ~7,2G"
                       ;; crude mag adj based on 3c273
                       ct
                       x y
@@ -970,7 +972,7 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
     ))
             
 (defun phot-limit (img)
-  (let* ((nf-sigma (* *gain* (sqrt (img-s0sq img))))
+  (let* ((nf-sigma (* (img-gain img) (sqrt (img-s0sq img))))
          (dom      '(7 22)))
     (labels ((inv-mag (x)
                (expt 10.0 (* -0.4 (- x (img-mag-off img)))))

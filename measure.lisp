@@ -42,7 +42,7 @@
         (format t "~%!! Star possibly in saturation !!")
         ))
     (if (plusp ampl)
-        (let+ ((gain   *gain*) ;; e-/ADU
+        (let+ ((gain   (img-gain img)) ;; e-/ADU
                (ampl   (* gain ampl))
                (tnoise (sqrt (+ ampl (* gain gain s0sq))))
                (thresh (* nsigma tnoise))
@@ -55,7 +55,7 @@
                       :y    yc
                       :mag  (magn img ampl)
                       :snr  snr
-                      :core ampl
+                      :flux ampl
                       :sd   tnoise))
             (format t "~%Failed: Sum below threshold:~%   Mag ≈ ~4,1F  SNR ≈ ~3,1F"
                     (magn img ampl) snr)))
@@ -302,14 +302,16 @@
 (defun rtod (x)
   (* x (/ 45f0 (atan 1f0))))
 
+(defun acceptable-training-star-p (img star)
+  ;; Improvements will be based on stars
+  ;; with flux: 4000 < adu < 32758
+  (let ((z (/ (star-flux star) (img-gain img))))
+    (or (< z  4000)
+        (> z 32768))
+    ))
+
 (defun improve-sigma (img &key fit-args (radius 7))
-  (let+ ((stars   (remove-if (lambda (star)
-                               ;; Improvements will be based on stars
-                               ;; with magnitudes: 9.0 <= mag <= 11.5
-                               (let ((mag (star-mag star)))
-                                 (or (< mag  9.0)
-                                     (> mag 11.5))
-                                 ))
+  (let+ ((stars   (remove-if (um:curry #'acceptable-training-star-p img)
                              (img-stars img))))
     (format t "~%~D stars selected to guide improvement" (length stars))
     (labels ((quality-sum (vec)
@@ -418,7 +420,7 @@
                     (loop for x from (box-left srch-box) below (box-right srch-box) nconc
                             (when (>= (bref srch-arr y x) mult-thr)
                               (let+ ((:mvb (yc xc)   (locate-peak srch-arr y x))
-                                     (gain   *gain*) ;; e-/ADU
+                                     (gain   (img-gain ref-img)) ;; e-/ADU
                                      (ampl   (* gain (aref harr yc xc)))
                                      (tnoise (sqrt (+ ampl (* gain gain s0sq))))
                                      (snr    (/ ampl tnoise)))
@@ -432,7 +434,7 @@
                                       :y    yc
                                       :mag  (magn ref-img ampl)
                                       :snr  snr
-                                      :core ampl
+                                      :flux ampl
                                       :sd   tnoise))
                                   )))
                           )))))
@@ -775,28 +777,26 @@
 
 (defun improve-stars (img thresh stars0)
   ;; Using initial find, try to improve the Gaussian core model and redo
-  (if (>= (count-if (lambda (star)
-                      (let ((mag (star-mag star)))
-                        (and (> mag 9.0)
-                             (< mag 11.5))))
-                    stars0)
-          5)
-      ;; Don't bother doing this unless at least 5 stars to base on
-      (progn
-        (format t "~%~D initial stars" (length stars0))
-        (setf (img-stars img) stars0)
-        (let+ ((prof       (img-fake-star img))
-               (sigma0     (fake-sigma prof))
-               (_          (format t "~%initial sigma ~6,4F" sigma0))
+  (let ((acceptable (count-if (um:curry #'acceptable-training-star-p img) stars0)))
+    (cond ((>= acceptable 5)
+           ;; Don't bother doing this unless at least 5 stars to base on
+           (format t "~%~D initial stars" (length stars0))
+           (setf (img-stars img) stars0)
+           (let+ ((prof       (img-fake-star img))
+                  (sigma0     (fake-sigma prof))
+                  (_          (format t "~%initial sigma ~6,4F" sigma0))
                (radius     (fake-radius prof))
                (:mvb (new-sigma new-prof) (improve-sigma img :fit-args sigma0 :radius radius)))
-          (format t "~%Improved sigma: ~6,4F" new-sigma)
-          (setf (img-fake-star img) new-prof
-                (img-s0sq img)      (s0sq img))
-          (find-stars img thresh)
-          ))
-    ;; else
-    stars0))
+             (format t "~%Improved sigma: ~6,4F" new-sigma)
+             (setf (img-fake-star img) new-prof
+                   (img-s0sq img)      (s0sq img))
+             (find-stars img thresh)
+             ))
+
+          (t
+           (format t "~%Insufficient number of stars for adapting PSF model")
+           stars0)
+          )))
 
 (defun measure-stars (img &key (thresh 5))
   (let+ ((stars0 (find-stars img thresh))
