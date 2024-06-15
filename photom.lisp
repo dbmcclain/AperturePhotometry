@@ -107,8 +107,11 @@
     (let+ ((img (extract-image path chan))
            (s0sq (s0sq img)))
       (setf (img-s0sq img) s0sq)
-      (when (> (reduce #'max (vm:make-overlay-vector (img-arr img))) 62000)
-        (warn "Image likely contains blown-out saturated stars"))
+      (let ((vmax (reduce #'max (vm:make-overlay-vector (img-arr img))))) 
+        (if (> vmax 62000)
+            (warn "Image likely contains blown-out stars")
+          (when (> vmax 32768)
+            (warn "Image possibly contains saturated stars"))))
       (measure-stars img)
       (show-img 'img img)
       (report-stars img)
@@ -820,23 +823,23 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
                     (:x #'star-x)
                     (:y #'star-y)
                     (t  #'star-mag))
-                  )
-        (stars   (img-stars img)))
-    
-    (plt:histogram 'ring-sd (mapcar #'star-sd stars)
-                   :clear t
-                   :title "Ring Stdev"
-                   :xtitle "Ring Stdev [du]"
-                   :ytitle "Density")
-    (plt:plot 'ring-sd-vs (mapcar #'star-mag stars)
-              (mapcar #'star-sd stars)
-              :clear t
-              :ylog t
-              :title "Star SD vs Magnitude"
-              :xtitle "Magnitude [mag]"
-              :ytitle "Star SD [σ]"
-              :symbol :cross)
-    
+                  ))
+    #|
+    (let ((stars   (img-stars img)))
+      (plt:histogram 'ring-sd (mapcar #'star-sd stars)
+                     :clear t
+                     :title "Ring Stdev"
+                     :xtitle "Ring Stdev [du]"
+                     :ytitle "Density")
+      (plt:plot 'ring-sd-vs (mapcar #'star-mag stars)
+                (mapcar #'star-sd stars)
+                :clear t
+                :ylog t
+                :title "Star SD vs Magnitude"
+                :xtitle "Magnitude [mag]"
+                :ytitle "Star SD [σ]"
+                :symbol :cross))
+    |#
     (phot-limit img)
     (format t "~%Count  Star Pos       Mag   SNR    CoreSum      SD")
     (format t "~%         X    Y")

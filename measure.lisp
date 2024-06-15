@@ -36,8 +36,11 @@
          (pk           (aref arr yc xc)))
     (format t "~%Cursor position ~D, ~D" x y)
     (format t "~%Peak position   ~D, ~D (~@D,~@D)" xc yc (- xc x) (- yc y))
-    (when (> pk 62000)
-      (format t "~%!! Star likely blown !!"))
+    (if (> pk 62000)
+        (format t "~%!! Star likely blown !!")
+      (when (> pk 32768)
+        (format t "~%!! Star possibly in saturation !!")
+        ))
     (if (plusp ampl)
         (let+ ((tnoise (sqrt (+ ampl s0sq)))
                (thresh (* nsigma tnoise))
@@ -282,9 +285,9 @@
 (defun improve-sigma (img &key fit-args (radius 7))
   (let+ ((stars   (remove-if (lambda (star)
                                ;; Improvements will be based on stars
-                               ;; with magnitudes: 8.0 <= mag <= 11.5
+                               ;; with magnitudes: 9.0 <= mag <= 11.5
                                (let ((mag (star-mag star)))
-                                 (or (< mag  8.0)
+                                 (or (< mag  9.0)
                                      (> mag 11.5))
                                  ))
                              (img-stars img))))
@@ -381,7 +384,6 @@
   (let+ ((krnl        (img-fake-star ref-img))
          (s0sq        (img-s0sq ref-img))
          (nsigma      thresh)
-         (med         (img-med ref-img))
          (himg        (make-himg ref-img))
          (harr        (img-arr himg))
          (thr         (* nsigma (sqrt s0sq)))
@@ -754,7 +756,7 @@
   ;; Using initial find, try to improve the Gaussian core model and redo
   (if (>= (count-if (lambda (star)
                       (let ((mag (star-mag star)))
-                        (and (> mag 8.0)
+                        (and (> mag 9.0)
                              (< mag 11.5))))
                     stars0)
           5)
@@ -784,6 +786,7 @@
           (img-thr   himg) thresh
           (img-stars himg) stars)
     (format t "~%~D stars found" (length stars))
+    #|
     (let* ((snrs  (map 'vector #'star-snr stars))
            (pc25  (vm:percentile snrs 25))
            (pc75  (vm:percentile snrs 75)))
@@ -794,15 +797,23 @@
                      :xlog t
                      :title "SNR Histo"
                      :xtitle "SNR"
-                     :ytitle "Density")
+                     :ytitle "Density"))
+    |#
+    ;; detections hilighted in green, saturations in red.
+    (let* ((arr     (img-arr img))
+           (trimmed (remove-if (lambda (star)
+                                 (< (aref arr (star-y star) (star-x star)) 32768))
+                               stars)))
       (plt:with-delayed-update ('himg)
         (show-img 'himg himg)
-        (hilight-stars 'himg stars :green))
+        (hilight-stars 'himg stars :green)
+        (hilight-stars 'himg trimmed :red))
       (plt:with-delayed-update ('stars)
         (show-img 'stars img)
-        (hilight-stars 'stars stars :green))
-      (values)
-      )))
+        (hilight-stars 'stars stars :green)
+        (hilight-stars 'stars trimmed :red)))
+    (values)
+    ))
 
 #|
   *core-radius*

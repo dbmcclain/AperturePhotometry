@@ -86,6 +86,7 @@
                    (mad  (vm:mad img med))
                    (sd   (* +mad/sd+ mad)))
               (print (list :med med :mad mad :sigma sd))
+              #|
               (plt:histogram 'img-histo
                              (map 'vector (lambda (x)
                                             (clip
@@ -96,6 +97,7 @@
                              :title "BG Image Statistics"
                              :xtitle "(Value - Median) [MAD]"
                              :ytitle "Density")
+              |#
               (plt:histogram 'img-histox
                              (map 'vector (lambda (x)
                                             (clip
