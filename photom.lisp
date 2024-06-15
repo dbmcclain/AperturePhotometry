@@ -14,10 +14,10 @@
 (defvar *fits-segment-length* 2880)
 
 (defvar *fits-hdr*)
-(defvar *mag-offset*   #.(+ (- 12.9 -6.99)
-                               (- 13.2 12.90)
-                               (- 0     0.12)
-                               (- 13.2 13.34425)))
+
+(defvar *gain*         80)  ;; e-/ADU
+(defvar *mag-offset*   25f0)
+
 (defvar *fake-star*  nil)
 (defvar *fake-mag*   )
 (defvar *fake-radius*)
@@ -36,10 +36,7 @@
 
 (defun do-with-seestar (fn)
   (let* ((*core-radius*   2)
-         (*mag-offset*    #.(+ (- 12.9 -6.99)
-                               (- 13.2 12.90)
-                               (- 0     0.12)
-                               (- 13.2 13.34425)))
+         (*mag-offset*    25f0)
          (*fake-star*     (or *fake-star-130*
                               (let ((*core-radius* 7))
                                 (setf *fake-star-130* (make-gaussian-elliptical-fake-star
@@ -973,8 +970,8 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
     ))
             
 (defun phot-limit (img)
-  (let* ((nf-sigma (sqrt (img-s0sq img)))
-         (dom      '(7 18)))
+  (let* ((nf-sigma (* *gain* (sqrt (img-s0sq img))))
+         (dom      '(7 22)))
     (labels ((inv-mag (x)
                (expt 10.0 (* -0.4 (- x (img-mag-off img)))))
              (nf (flux nf)
@@ -996,7 +993,7 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
                  :legend "No Noise")
       (plt:fplot 'phot-limit dom (um:rcurry #'snr nf-sigma)
                  :thick 2
-                 :legend (format nil "Noise Floor 1σ = ~4,1Fdu" nf-sigma))
+                 :legend (format nil "Noise Floor 1σ = ~4,1Fdu" (/ nf-sigma *gain*)))
       (plt:plot 'phot-limit dom '(5 5)
                 :color :gray50
                 :thick 3
@@ -1013,6 +1010,7 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
       )))
 
 #|
+(phot-limit *saved-img*)
 (loop for iy 0 below 4 do
         (loop for ix from 0 below 4 do
               (setf (aref (img-arr *saved-img*) iy ix) 1f6)))

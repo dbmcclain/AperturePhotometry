@@ -42,7 +42,9 @@
         (format t "~%!! Star possibly in saturation !!")
         ))
     (if (plusp ampl)
-        (let+ ((tnoise (sqrt (+ ampl s0sq)))
+        (let+ ((gain   *gain*) ;; e-/ADU
+               (ampl   (* gain ampl))
+               (tnoise (sqrt (+ ampl (* gain gain s0sq))))
                (thresh (* nsigma tnoise))
                (snr    (/ ampl tnoise)))
           (format t "~%Peak value ~7,1F (raw ~D)" ampl (round pk))
@@ -159,7 +161,7 @@
 ;; Major and minor axis sigmas, and angle of major axis of Ellipse,
 ;; are least-squares fitted values, using brighter stars to guide the
 ;; fitting. Angle measured with respect to the sensor grid.
-
+#|
 ;; --------------------------------------------------------------------
 ;; Least-squares fitting to Gaussian core + BG
 ;;
@@ -180,17 +182,20 @@
 ;;  Treat <X| as a row-vector, and |X> as a column vector.
 ;;  G is the Gaussian kernel, I is the image of a star.
 ;;
+;;   |I> = A.|G> + B.|1> + |eps>, for noise |eps>
+;;
 ;;   Then:
 ;;   Δ = N <G|G> - <G|1>^2 > 0,        Proof that Δ > 0? <G|G> and <1|1> are the squared lengths
 ;;   A = (N <G|I> - <G|1><I|1>)/Δ      of two non-colinear vectors in N-space. Their product is obviously 
 ;;   B = (<G|G><I|1> - <G|1><G|I>)/Δ   greater than the square of their common projected sub-vector length.
 ;;
 ;;   If we define angle Θ from <G|1> = |G|.|1|.cosΘ, where . = ordinary multiplication,
-;;   Then Δ = |G|^2.|1|^2.(1 - (cosΘ)^2) > 0, unless Θ = 0 or π.
+;;   Then Δ = |G|^2.|1|^2.(1 - (cosΘ)^2) = |G|^2.|1|^2.(sinΘ)^2 > 0, unless Θ = 0 or π.
+;;   (Also happens to be the squared length of the 2D vector cross prod)
 ;;
 ;; Define correlation image <G'| = <G| - <G|1>/N <1|, then <G'|1> = 0, since <1|1> = N.
-;; IOW, <G'| is the orthogonal component of <G| to <1|.
-;; <1| is the everything correlator. It filters nothing, and simply causes a sum over all pixels.
+;; IOW, <G'| is the component of <G| that is orthogonal to <1|. This is Graham-Schmidt orthogonalization.
+;; <1| is the everything correlator, a low-pass filter. It causes a sum over all pixels.
 ;;
 ;; Then with <G'| we get:
 ;;
@@ -200,10 +205,24 @@
 ;;
 ;;   Δ' = N <G'|G'>
 ;;   A' = N <G'|I>/Δ' = <G'|I>/<G'|G'>, a measure of similarity or anti-similarity between <G'| and <I|.
-;;   B' = <G'|G'><I|1>/Δ' = <I|1>/N = average of image flux spread out over all the pixel.
+;;   B' = <G'|G'><I|1>/Δ' = <I|1>/N = average of image flux spread out over all the pixels.
+;;
+;;     |G> = |G'> + <G|1>/N.|1>
+;;
+;;     |I> = A.|G> + B.|1> + |eps>
+;;         = A'.|G'> + B'.|1> + |eps>
+;;  
+;;     <G'|I> = A'.<G'|G'> = A.<G'|G> = A.<G'|G'>
+;;                => A = A'
+;;     <1|I>  = B'.<1|1> = A.<1|G> + B.<1|1>
+;;                => B.N = B'.N - A'.<1|G> => B = B' - A'.<1|G>/N
+;;
+;;  So, bottom line, we don't give a hoot about B or B'. And A = A'.
+;;  So we get the same measured star amplitude using either |G> or
+;;  |G'>.
 ;;
 ;; --------------------------------------------------------------------------------------------
-;;   Noise Variance in star-free region, given SD for image: (= 1.4826 * MAD)
+;;   Noise Variance of measurement in star-free region, given SD for image: (= 1.4826 * MAD)
 ;;
 ;;      S0^2_meas = N SD^2 / Δ
 ;;
@@ -215,6 +234,7 @@
 ;;
 ;;     SNR = A / Sqrt(S*^2_meas)
 ;;
+|#
 
 (defun measure-flux (arr y x prof)
   ;; Least squares fit of star core to Gaussian profile
@@ -369,6 +389,7 @@
 #|
 (improve-sigma *saved-img*)
 (setf *fake-star-130* nil)
+(phot-limit *saved-img*)
 (with-seestar
   (setf *saved-img* (photom)))
 (with-img *saved-img*
@@ -397,8 +418,9 @@
                     (loop for x from (box-left srch-box) below (box-right srch-box) nconc
                             (when (>= (bref srch-arr y x) mult-thr)
                               (let+ ((:mvb (yc xc)   (locate-peak srch-arr y x))
-                                     (ampl   (aref harr yc xc))
-                                     (tnoise (sqrt (+ ampl s0sq)))
+                                     (gain   *gain*) ;; e-/ADU
+                                     (ampl   (* gain (aref harr yc xc)))
+                                     (tnoise (sqrt (+ ampl (* gain gain s0sq))))
                                      (snr    (/ ampl tnoise)))
                                 (when (>= snr nsigma)
                                   ;; everything passed, so clear the
@@ -439,14 +461,13 @@
          (htx       (um:ceiling-pwr2 ht))
          (prof      (img-fake-star img))
          (kradius   (fake-radius prof))
-         (Δ         (fake-Δ prof))
          (ksum      (fake-ksum prof))
+         (k2sum     (fake-k2sum prof))
          (npix      (fake-npix prof))
          (mnf       (/ ksum npix))
-         (norm      (/ Δ npix))
          ;; Construct the <G'| matrix
          (krnl      (map-array (lambda (x)
-                                 (/ (- x mnf) norm))
+                                 (/ (- x mnf) k2sum))
                                (fake-krnl prof)))
          (wrk-arr   (make-image-array htx wdx :initial-element 0f0))
          (kwrk-arr  (make-image-array htx wdx :initial-element 0f0)))
