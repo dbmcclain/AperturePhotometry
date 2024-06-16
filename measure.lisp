@@ -391,11 +391,13 @@
 #|
 (improve-sigma *saved-img*)
 (setf *fake-star-130* nil)
+(show-img 'img *saved-img* :level :binary)
 (phot-limit *saved-img*)
+(report-stars *saved-img*)
 (with-seestar
   (setf *saved-img* (photom)))
 (with-img *saved-img*
-  (measure-stars *saved-img*))
+  (measure-stars *saved-img* :thresh 50))
 ;; Perim = 2*(2r+1) + 2(2r+1-2) = 8r
 |#
 
@@ -411,7 +413,8 @@
          (harr        (img-arr himg))
          (thr         (* nsigma (sqrt s0sq)))
          (ring-radius (fake-radius krnl))
-         (srch-box    (inset-box (make-box-of-array harr) ring-radius ring-radius))
+         (margin      (1+ ring-radius))
+         (srch-box    (inset-box (make-box-of-array harr) margin margin))
          (srch-arr    (make-masked-array harr srch-box)))
     (loop for mult in '(200 100 50 25 12 6 1)
           for mult-thr = (* mult thr)
@@ -464,16 +467,15 @@
          (prof      (img-fake-star img))
          (kradius   (fake-radius prof))
          (ksum      (fake-ksum prof))
-         (k2sum     (fake-k2sum prof))
          (npix      (fake-npix prof))
          (mnf       (/ ksum npix))
-         ;; Construct the <G'| matrix
-         (krnl      (map-array (lambda (x)
-                                 (/ (- x mnf) k2sum))
-                               (fake-krnl prof)))
+         ;; Construct the G' matrix
+         (krnl      (map-array (um:rcurry #'- mnf) (fake-krnl prof)))
+         (norm      (vm:inner-prod krnl krnl))
          (wrk-arr   (make-image-array htx wdx :initial-element 0f0))
          (kwrk-arr  (make-image-array htx wdx :initial-element 0f0)))
     (implant-subarray wrk-arr arr 0 0)
+    (map-array-into krnl (um:rcurry #'/ norm) krnl)
     (implant-subarray kwrk-arr krnl 0 0)
     ;; FT of a correlation is the conj prod of their FT's
     (let+ ((fimg  (fft2d:fwd wrk-arr))
