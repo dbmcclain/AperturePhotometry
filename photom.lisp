@@ -107,7 +107,7 @@
       (setf (img-s0sq img) s0sq
             (img-gain img) *gain*)
       (let ((vmax (reduce #'max (vm:make-overlay-vector (img-arr img))))) 
-        (if (> vmax 62000)
+        (if (> vmax #.(- 65526 256))
             (warn "Image likely contains blown-out stars")
           (when (> vmax 32768)
             (warn "Image possibly contains saturated stars"))))

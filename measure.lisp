@@ -36,7 +36,7 @@
          (pk           (aref arr yc xc)))
     (format t "~%Cursor position ~D, ~D" x y)
     (format t "~%Peak position   ~D, ~D (~@D,~@D)" xc yc (- xc x) (- yc y))
-    (if (> pk 62000)
+    (if (> pk #.(- 65536 256))
         (format t "~%!! Star likely blown !!")
       (when (> pk 32768)
         (format t "~%!! Star possibly in saturation !!")
