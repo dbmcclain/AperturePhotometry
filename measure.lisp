@@ -219,7 +219,7 @@
 ;;
 ;;  So, bottom line, we don't give a hoot about B or B'. And A = A'.
 ;;  So we get the same measured star amplitude using either |G> or
-;;  |G'>.
+;;  |G'>. But we can do in one convolution with |G'>.
 ;;
 ;; --------------------------------------------------------------------------------------------
 ;;   Noise Variance of measurement in star-free region, given SD for image: (= 1.4826 * MAD)
