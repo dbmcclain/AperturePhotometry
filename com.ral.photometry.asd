@@ -13,8 +13,10 @@
                 (:file "fits-reader")
                 (:file "measure")
                 (:file "fakes")
-                (:file "plant+harvest"))
+                (:file "plant+harvest")
+                (:file "accuracy"))
   :serial       t
   :depends-on   ("com.ral.useful-macros"
+                 "com.ral.csv"
                  ))
 

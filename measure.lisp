@@ -23,6 +23,21 @@
 (measure-location *saved-img* 518.  814.)
 |#
 
+(defun format-ra (radeg)
+  (let+ ((:mvb (hrs hfrac)  (truncate (/ radeg 15)))
+         (:mvb (mins mfrac) (truncate (* 60 hfrac)))
+         (:mvb (secs sfrac) (truncate (* 60 mfrac))))
+    (format nil "~2,'0D:~2,'0D:~2,'0D.~D"
+            hrs mins secs (round sfrac 0.1))))
+
+(defun format-dec (decdeg)
+  (let+ ((:mvb (degs dfrac) (truncate (abs decdeg)))
+         (:mvb (mins mfrac) (truncate (* 60 dfrac)))
+         (secs (round (* 60 mfrac))))
+    (format nil "~c~2,'0D:~2,'0D:~2,'0D"
+            (if (minusp decdeg) #\- #\+)
+            degs mins secs)))
+
 (defun measure-location (img x y &key (srch-radius 4))
   (let+ ((himg         (img-himg img))
          (arr          (img-arr img))
@@ -32,10 +47,13 @@
          (nsigma       (img-thr img))
          (srch-box     (make-box-of-radius x y srch-radius))
          (:mvb (yc xc) (array-max-pos-in-box harr srch-box))
+         (:mvb (α δ)   (to-radec img xc yc))
          (ampl         (aref harr yc xc))
          (pk           (aref arr yc xc)))
     (format t "~%Cursor position ~D, ~D" x y)
     (format t "~%Peak position   ~D, ~D (~@D,~@D)" xc yc (- xc x) (- yc y))
+    (format t "~%α ~A  δ ~A"
+            (format-ra α) (format-dec δ))
     (if (> pk #.(- 65536 256))
         (format t "~%!! Star likely blown !!")
       (when (> pk 32768)
@@ -53,6 +71,8 @@
               (print (make-star
                       :x    xc
                       :y    yc
+                      :ra   α
+                      :dec  δ
                       :mag  (magn img ampl)
                       :snr  snr
                       :flux ampl

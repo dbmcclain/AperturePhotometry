@@ -47,7 +47,8 @@
             (naxis3 (or (nquery-header hdr "naxis3") 1))
             (bzero  (truncate (or (nquery-header hdr "bzero")  0)))
             (bscale (truncate (or (nquery-header hdr "bscale") 1)))
-            (bayer  (nquery-header hdr "bayerpat"))) ;; should return as a quoted symbol, e.g., 'GRBG
+            (bayer  (nquery-header hdr "bayerpat")) ;; should return as a quoted symbol, e.g., 'GRBG
+            (gain   (nquery-header hdr "gain")))
         (when (and naxis
                    bitpix
                    naxis1
@@ -110,10 +111,11 @@
                              :ytitle "Density")
             
               (make-img
-               :arr img
-               :med med
-               :mad mad
-               :hdr hdr)
+               :arr  img
+               :med  med
+               :mad  mad
+               :hdr  hdr
+               :gain gain)
               ))))
       )))
 

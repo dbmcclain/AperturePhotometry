@@ -14,6 +14,7 @@
 (defvar *fits-segment-length* 2880)
 
 (defvar *fits-hdr*)
+(defvar *saved-img*)
 
 (defvar *gain*         80)  ;; e-/ADU
 (defvar *mag-offset*   25f0)
@@ -76,10 +77,12 @@
   (fake-star *fake-star*)
   gain
   s0sq
-  himg)
+  himg
+  cat
+  ncat)
 
 (defstruct star
-  x y mag snr flux sd)
+  x y mag snr flux sd ra dec catv dx dy)
 
 (defstruct fake
   krnl Δ npix ksum k2sum radius sigma box)
@@ -104,21 +107,24 @@
     (format t "~%Channel ~A:" chan)
     (let+ ((img (extract-image path chan))
            (s0sq (s0sq img)))
-      (setf (img-s0sq img) s0sq
-            (img-gain img) *gain*)
+      (setf (img-s0sq img) s0sq)
       (let ((vmax (reduce #'max (vm:make-overlay-vector (img-arr img))))) 
         (if (> vmax #.(- 65526 256))
             (warn "Image likely contains blown-out stars")
           (when (> vmax 32768)
             (warn "Image possibly contains saturated stars"))))
       (measure-stars img)
-      (show-img 'img img)
+      (get-star-positions img)
+      (get-catalog img)
+      (find-stars-in-cat img)
+      (show-match img)
       (report-stars img)
       img
       )))
 
 #|
-(photom)
+(with-seestar
+  (photom))
  |#
 ;; ------------------------------------------------------------------------------
 ;; Subslices of images...
@@ -822,7 +828,9 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
                     (:x #'star-x)
                     (:y #'star-y)
                     (t  #'star-mag))
-                  ))
+                  )
+        (stars (remove nil (img-stars img)
+                       :key #'star-catv)))
     #|
     (let ((stars   (img-stars img)))
       (plt:histogram 'ring-sd (mapcar #'star-sd stars)
@@ -840,26 +848,94 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
                 :symbol :cross))
     |#
     (phot-limit img)
-    (format t "~%Count  Star Pos       Mag   SNR       Flux      SD")
-    (format t "~%         X    Y")
-    (format t "~%---------------------------------------------------")
-    (loop for star in (sort (img-stars img) #'< :key sort-key)
+    (format t "~%Count   Star Pos      Mag    SNR      Flux      SD      RA      Dec     GMag     dx     dy")
+    (format t "~%         X    Y                                         deg     deg            arcsec  arcsec")
+    (format t "~%---------------------------------------------------------------------------------------------")
+    (loop for star in (sort stars #'< :key sort-key)
           for ct from 1
           do
             (with-accessors ((x    star-x)
                              (y    star-y)
                              (mag  star-mag)
                              (snr  star-snr)
-                             (core star-core)
-                             (sd   star-sd)) star
-              (format t "~%~3D   ~4D ~4D    ~6,2F  ~6,1F  ~7,2G ~7,2G"
+                             (flux star-flux)
+                             (sd   star-sd)
+                             (ra   star-ra)
+                             (dec  star-dec)
+                             (cmag star-catv)
+                             (dx   star-dx)
+                             (dy   star-dy)) star
+              (format t "~%~4D   ~4D ~4D    ~6,2F  ~6,1F  ~7,2G ~7,2G  ~8,4F  ~7,4F  ~5,2F  ~5,2F  ~5,2F"
                       ;; crude mag adj based on 3c273
                       ct
                       x y
                       mag (float snr 1.0)
-                      (round core)
-                      sd)
+                      flux
+                      sd
+                      (or ra 0.0)
+                      (or dec 0.0)
+                      (or cmag 0.0)
+                      (* 3600 (or dx   0.0))
+                      (* 3600 (or dy   0.0)))
               ))))
+
+(defun show-match (img)
+  (let+ ((stars  (remove nil (img-stars img)
+                         :key #'star-catv))
+         (xs     (mapcar (um:curry #'* 3600) (mapcar #'star-dx stars)))
+         (ys     (mapcar (um:curry #'* 3600) (mapcar #'star-dy stars)))
+         (mags   (map 'vector #'star-mag stars))
+         (cmags  (map 'vector #'star-catv stars))
+         (mincm  (reduce #'min cmags))
+         (maxcm  (reduce #'max cmags))
+         (dmags  (map 'vector #'- mags cmags))
+         (flux   (map 'vector #'star-flux stars))
+         (lflux  (map 'vector (um:rcurry #'log 10) flux))
+         (minfl  (expt 10 (floor   (reduce #'min lflux))))
+         (maxfl  (expt 10 (ceiling (reduce #'max lflux))))
+         (:mvb   (y0 sigma)
+             (linfit:regress-fixed-slope lflux cmags 1 -2.5)))
+    (plt:plot 'miss xs ys
+              :clear t
+              :symbol :cross
+              :xrange '(-8 8)
+              :yrange '(-8 8)
+              :title "Star-Catalog Misses"
+              :xtitle "dx [arcsec]"
+              :ytitle "dy [arcsec]")
+    (plt:plot 'dmag mags dmags
+              :clear t
+              :symbol :cross
+              :xrange '(7 18)
+              :title "Mag - Cat"
+              :xtitle "Mag [mag]"
+              :ytitle "Mag - Cat [mag]")
+    (plt:fplot 'zp `(,minfl ,maxfl)
+               (lambda (flux)
+                 (+ y0 (* -2.5 (log flux 10))))
+              :clear t
+              :xlog  t
+              :yrange `(,(ceiling (+ 0.5 maxcm)) ,(floor (- mincm 0.5)))
+              :color :red
+              :thick 2
+              :title "Flux vs Cat GMag"
+              :xtitle "Flux [e-]"
+              :ytitle "Cat GMag [mag]")
+    (plt:plot 'zp flux cmags
+              :symbol :dot)
+    (plt:draw-text 'zp
+                   (format nil "Mag Offs = ~5,2F" y0)
+                   '((:frac 0.1) (:frac 0.85)))
+    (plt:draw-text 'zp
+                   (format nil "Sigma = ~5,2F" sigma)
+                   '((:frac 0.1) (:frac 0.8)))
+    (let* ((magoff (img-mag-off img))
+           (dmag   (- y0 magoff)))
+      (dolist (star (img-stars img))
+        (incf (star-mag star) dmag))
+      (setf (img-mag-off img) y0))
+    (show-img 'img img)
+    ))
 
 #|
 (report-stars *saved-img* :sort :mag)
@@ -867,7 +943,7 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
 (report-stars *slice-img* :sort :y)
 (with-img *slice-img*
   (show-sub-dets 435 500))
-
+(Show-match *saved-img*)
 |#
 ;; ---------------------------------------------------------------
 ;; Slices - sub-images of images
