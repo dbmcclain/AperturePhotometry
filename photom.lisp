@@ -851,7 +851,7 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
     |#
     (phot-limit img)
     (format t "~%Count   Star Pos      Mag    SNR      Flux      SD      RA      Dec     GMag     dx     dy")
-    (format t "~%         X    Y                                         deg     deg            arcsec  arcsec")
+    (format t "~%         X    Y              dBσ                        deg     deg            arcsec  arcsec")
     (format t "~%---------------------------------------------------------------------------------------------")
     (loop for star in (sort stars #'< :key sort-key)
           for ct from 1
@@ -1069,23 +1069,23 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
                (abs (complex (sqrt flux) nf)))
              (snr (mag nf)
                (let ((flux (inv-mag mag)))
-                 (/ flux (nf flux nf)))))
+                 (db10 (/ flux (nf flux nf))))))
       ;; Noise free situation, sigma = Sqrt(Flux). So min 5σ flux is 25 du.
       ;; Theoretical statistical limit 5σ should = MagOffset - 2.5 Log10(25)
       ;;                                         = MagOffset - 3.49
       (plt:fplot 'phot-limit dom (um:rcurry #'snr 0)
                  :clear t
                  :thick 1
-                 :ylog  t
+                 ;; :ylog  t
                  :color :blue
                  :title "SNR vs Magnitude"
                  :xtitle "Star Magnitude [mag]"
-                 :ytitle "SNR [σ]"
+                 :ytitle "SNR [dBσ]"
                  :legend "No Noise")
       (plt:fplot 'phot-limit dom (um:rcurry #'snr nf-sigma)
                  :thick 2
                  :legend (format nil "Noise Floor 1σ = ~4,1Fdu" (/ nf-sigma *gain*)))
-      (plt:plot 'phot-limit dom '(5 5)
+      (plt:plot 'phot-limit dom `(,(db10 5) ,(db10 5))
                 :color :gray50
                 :thick 3
                 :legend "5σ Limit")

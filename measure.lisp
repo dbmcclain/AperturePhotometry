@@ -38,6 +38,9 @@
             (if (minusp decdeg) #\- #\+)
             degs mins secs)))
 
+(defun db10 (x)
+  (* 10 (log x 10)))
+
 (defun measure-location (img x y &key (srch-radius 4))
   (let+ ((himg         (img-himg img))
          (arr          (img-arr img))
@@ -74,7 +77,7 @@
                       :ra   α
                       :dec  δ
                       :mag  (magn img ampl)
-                      :snr  snr
+                      :snr  (db10 snr)
                       :flux ampl
                       :sd   tnoise))
             (format t "~%Failed: Sum below threshold:~%   Mag ≈ ~4,1F  SNR ≈ ~3,1F"
@@ -456,7 +459,7 @@
                                       :x    xc
                                       :y    yc
                                       :mag  (magn ref-img ampl)
-                                      :snr  snr
+                                      :snr  (db10 snr)
                                       :flux ampl
                                       :sd   tnoise))
                                   )))
