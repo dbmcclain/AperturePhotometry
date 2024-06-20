@@ -48,7 +48,7 @@
             (bzero  (truncate (or (nquery-header hdr "bzero")  0)))
             (bscale (truncate (or (nquery-header hdr "bscale") 1)))
             (bayer  (nquery-header hdr "bayerpat")) ;; should return as a quoted symbol, e.g., 'GRBG
-            (gain   (nquery-header hdr "gain")))
+            (gain   (or (nquery-header hdr "gain") 150)))
         (when (and naxis
                    bitpix
                    naxis1

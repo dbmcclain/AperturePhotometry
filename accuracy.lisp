@@ -205,8 +205,8 @@ https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/345/gaia2&-c=240.005064%
                ;;   uw = u + F(u,v), F(u,v) = Sum(a_i_j*u^i*v^j)
                ;;   vw = v + G(u,v), G(u,v) = Sum(b_i_j*u^i*v^j)
                ;;
-               (let+ ((u   (- (+ xp 0.5) cr_x))
-                      (v   (- (+ yp 0.5) cr_y)))
+               (let+ ((u   (- (1+ xp) cr_x))
+                      (v   (- (1+ yp) cr_y)))
                  (values
                   (+ u
                      a_0_0
@@ -301,6 +301,24 @@ cr_ra cr_dec radius)))
                   until (eql line sin)
                   collect line)))
     (prep-cat img)
+    (gen-fast-cat-index img)
+    ))
+
+(defun gen-fast-cat-index (img)
+  (let ((tbl  (make-hash-table :test #'=)))
+    (um:nlet iter ((ix  -1)
+                   (cat (img-ncat img)))
+      (if (endp cat)
+          (setf (img-ncat img) tbl)
+        (let ((ix-new (floor (car (car cat)))))
+          (if (= ix-new ix)
+              (go-iter ix (cdr cat))
+            (progn
+              (loop for jx from (1+ ix) to ix-new do
+                      (setf (gethash jx tbl) cat))
+              (go-iter ix-new (cdr cat)))
+            ))
+        ))
     ))
 
 (defun prep-cat (img)
@@ -316,7 +334,9 @@ cr_ra cr_dec radius)))
             (um:nlet inner ((cat (nthcdr 3 cat))
                             (ans nil))
               (if (endp cat)
-                  (setf (img-ncat img) ans)
+                  (setf (img-ncat img) (stable-sort
+                                        (sort ans #'< :key #'cadr)
+                                        #'< :key #'car))
                 (let+ ((str   (car cat)))
                   (cond ((plusp (length str))
                          (let+ ((strs  (um:split-string str :delims '(#\|)))
@@ -336,20 +356,22 @@ cr_ra cr_dec radius)))
          (dec (star-dec star))
          (cdec (cos (dtor dec)))
          (tol  1/720)) ;; 5 arcsec
-    (um:nlet iter ((cat (img-ncat img))
+    (um:nlet iter ((cat (gethash (floor (- ra (/ tol cdec))) (img-ncat img)))
                    (ans nil))
       (if (endp cat)
           ans
         (let+ (( (ca cd gmag) (car cat))
-               (ddec (- dec cd))
-               (dra  (* cdec (- ra ca))))
-          (go-iter (cdr cat)
-                   (if (and (< (abs ddec) tol)
-                            (< (abs dra) tol))
-                       (cons `(,ddec ,dra ,(car cat)) ans)
-                     ans))
-          ))
-      )))
+               (ddec (- cd dec))
+               (dra  (* cdec (- ca ra))))
+          (if (>= dra tol)
+              ans
+            (go-iter (cdr cat)
+                     (if (and (< (abs ddec) tol)
+                              (< (abs dra) tol))
+                         (cons `(,ddec ,dra ,(car cat)) ans)
+                       ans))
+            ))
+        ))))
 
 (defun find-some-star (img)
   (dolist (star (img-stars img))
@@ -547,3 +569,44 @@ HIP=<<====myHIPsample
 |#
 |#
 
+(defun write-coords-file (img)
+  ;; Write a coords file for submission to Astrometry.net File should
+  ;; have X Y positions, one pair per line, sorted brightest to
+  ;; faintest.
+  ;;
+  ;; Our images have pixel (0,0) at the upper left corner, to match
+  ;; the view coming from the telescope. But FITS conventions have
+  ;; pixel (1,1) as the first pixel (Fortran) and located at the lower
+  ;; left. RA axis in FITS moves right to left, and Dec moves from
+  ;; bottom to top.
+  (with-open-file (*standard-output*  "~/astrometry.net.xycoords.txt"
+                                      :direction :output
+                                      :if-exists :supersede
+                                      :if-does-not-exist :create
+                                      :element-type 'character)
+    (dolist (star (sort (img-stars img) #'< :Key #'star-mag))
+      (princ (1+ (star-x star)))
+      (princ #\space)
+      (princ (1+ (star-y star)))
+      (terpri))
+    ))
+
+#|
+(write-coords-file *saved-img*)
+
+2024-06-20 12:09:46,110 Testing logger
+2024-06-20 12:09:46,110 Testing log.msg()
+2024-06-20 12:09:46,111 Starting Job processing for Job 10774026
+2024-06-20 12:09:46,118 Creating directory /home/nova/astrometry/net/data/jobs/1077/10774026
+2024-06-20 12:09:46,118 submission id 10054364
+2024-06-20 12:09:46,553 running: augment-xylist --out /home/nova/astrometry/net/data/jobs/1077/10774026/job.axy --scale-low 0.1 --scale-high 180.0 --scale-units degwidth --wcs wcs.fits --corr corr.fits --rdls rdls.fits --downsample 2 --objs 1000 --xylist /home/nova/astrometry/net/data/files/cached/c77/c77028ea24d5cd89a0d9791b11b49a1eca67a9dc --width 831 --height 1164 --tweak-order 2 
+2024-06-20 12:09:48,653 created axy file /home/nova/astrometry/net/data/jobs/1077/10774026/job.axy
+2024-06-20 12:09:48,653 command: cd /home/nova/astrometry/net/data/jobs/1077/10774026 && /home/nova/astrometry/net/solvescript.sh job-nova-10774026 job.axy >> /home/nova/astrometry/net/data/jobs/1077/10774026/log
+2024-06-20 12:10:01,943 Solver completed successfully.
+2024-06-20 12:10:01,943 Checking for WCS file /home/nova/astrometry/net/data/jobs/1077/10774026/wcs.fits
+2024-06-20 12:10:01,944 WCS file exists
+2024-06-20 12:10:02,814 Created TanWCS: <TanWCS: CRVAL (305.880158, 38.367503) CRPIX (645.000000, 636.250000) CD (-0.000240, -0.000621; -0.000620 0.000240) Image size (831.000000, 1164.000000)>
+2024-06-20 12:10:02,826 SkyLocation: <SkyLocation: nside(128) healpix(55112)>
+2024-06-20 12:10:02,955 Created Calibration Calibration 8341635
+2024-06-20 12:10:03,394 Finished job 10774026
+|#

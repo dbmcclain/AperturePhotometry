@@ -1,6 +1,8 @@
 ;; photom.lisp
 ;;
 ;; DM/RAL  2024/06/02 11:51:17 UTC
+;;
+;; Astrometry.net API Key: rcodfdxginnpcmxt
 ;; ----------------------------------
 
 (in-package #:com.ral.photometry)
@@ -102,7 +104,7 @@
 (defun photom (&optional fname (chan :G))
   (um:with-remembered-filename (path "Select FITS File"
                                       :photom fname
-                                      :filter "*.fit;*.fts")
+                                      :filter "*.fit;*.fts;*.fits")
     (terpri)
     (format t "~%Channel ~A:" chan)
     (let+ ((img (extract-image path chan))
@@ -124,7 +126,7 @@
 
 #|
 (with-seestar
-  (photom))
+  (setf *saved-img* (photom)))
  |#
 ;; ------------------------------------------------------------------------------
 ;; Subslices of images...
@@ -894,7 +896,7 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
          (minfl  (expt 10 (floor   (reduce #'min lflux))))
          (maxfl  (expt 10 (ceiling (reduce #'max lflux))))
          (:mvb   (y0 sigma)
-             (linfit:regress-fixed-slope lflux cmags 1 -2.5)))
+             (linfit:regress-fixed-slope lflux cmags 1 -2.5 :alpha 2 :beta 2)))
     (plt:plot 'miss xs ys
               :clear t
               :symbol :cross
