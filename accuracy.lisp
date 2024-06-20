@@ -362,13 +362,15 @@ cr_ra cr_dec radius)))
           ans
         (let+ (( (ca cd gmag) (car cat))
                (ddec (- cd dec))
-               (dra  (* cdec (- ca ra))))
+               (dra  (* cdec (- ca ra)))
+               (dr   (abs (complex ddec dra))))
           (if (>= dra tol)
               ans
             (go-iter (cdr cat)
-                     (if (and (< (abs ddec) tol)
-                              (< (abs dra) tol))
-                         (cons `(,ddec ,dra ,(car cat)) ans)
+                     (if (and (< dr tol)
+                              (or (null ans)
+                                  (< dr (car ans))))
+                         `(,dr ,dra ,ddec ,@(car cat))
                        ans))
             ))
         ))))
@@ -383,27 +385,16 @@ cr_ra cr_dec radius)))
 
 (defun find-stars-in-cat (img)
   (dolist (star (img-stars img))
-    (um:nlet iter ((ans   (find-star-in-cat img star))
-                   (rmin  nil)
-                   (which nil))
-      (if (endp ans)
-          (if which
-              (let+ (( (dx dy (_ _ gmag)) which))
-                (setf (star-catv star) gmag
-                      (star-dx   star) dx
-                      (star-dy   star) dy))
-            (setf (star-catv star) nil
-                  (star-dx   star) nil
-                  (star-dy   star) nil))
-        ;; else
-        (let+ (( (dx dy _) (car ans))
-               (r (abs (complex dx dy))))
-          (if (or (null rmin)
-                  (< r rmin))
-              (go-iter (cdr ans) r (car ans))
-            (go-iter (cdr ans) rmin which))
-          )))
-    ))
+    (let ((ans (find-star-in-cat img star)))
+      (if ans
+          (let+ (( (dr dra ddec cra cdec cmag) ans))
+            (setf (star-catv star) cmag
+                  (star-dx star) dra
+                  (star-dy star) ddec))
+        (setf (star-catv star) nil
+              (star-dx star) nil
+              (star-dy star) nil))
+      )))
                     
 #|
 (get-star-positions *saved-img*)

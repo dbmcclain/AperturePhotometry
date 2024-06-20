@@ -886,11 +886,14 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
                          :key #'star-catv))
          (xs     (mapcar (um:curry #'* 3600) (mapcar #'star-dx stars)))
          (ys     (mapcar (um:curry #'* 3600) (mapcar #'star-dy stars)))
-         (mags   (map 'vector #'star-mag stars))
+         (drs    (mapcar (lambda (dx dy)
+                           (abs (complex dx dy)))
+                         xs ys))
+         ;; (mags   (map 'vector #'star-mag stars))
          (cmags  (map 'vector #'star-catv stars))
          (mincm  (reduce #'min cmags))
          (maxcm  (reduce #'max cmags))
-         (dmags  (map 'vector #'- mags cmags))
+         ;; (dmags  (map 'vector #'- mags cmags))
          (flux   (map 'vector #'star-flux stars))
          (lflux  (map 'vector (um:rcurry #'log 10) flux))
          (minfl  (expt 10 (floor   (reduce #'min lflux))))
@@ -902,9 +905,16 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
               :symbol :cross
               :xrange '(-8 8)
               :yrange '(-8 8)
-              :title "Star-Catalog Misses"
-              :xtitle "dx [arcsec]"
-              :ytitle "dy [arcsec]")
+              :title "Matches: Catalog minus Star"
+              :xtitle "dα Cosδ [arcsec]"
+              :ytitle "dδ [arcsec]")
+    (plt:histogram 'hmiss drs
+                   :clear t
+                   :norm  nil
+                   :title "Matches: Distance Histogram"
+                   :xtitle "dist [arcsec]"
+                   :ytitle "Count")
+    #|
     (plt:plot 'dmag mags dmags
               :clear t
               :symbol :cross
@@ -912,6 +922,7 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
               :title "Mag - Cat"
               :xtitle "Mag [mag]"
               :ytitle "Mag - Cat [mag]")
+    |#
     (plt:fplot 'zp `(,minfl ,maxfl)
                (lambda (flux)
                  (+ y0 (* -2.5 (log flux 10))))
