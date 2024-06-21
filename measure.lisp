@@ -50,12 +50,13 @@
          (nsigma       (img-thr img))
          (srch-box     (make-box-of-radius x y srch-radius))
          (:mvb (yc xc) (array-max-pos-in-box harr srch-box))
-         (:mvb (α δ)   (to-radec img xc yc))
+         (:mvb (xcent ycent) (centroid himg xc yc))
+         (:mvb (α δ)   (to-radec img xcent ycent))
          (ampl         (aref harr yc xc))
          (pk           (aref arr yc xc)))
     (format t "~%Cursor position ~D, ~D" x y)
     (format t "~%Peak position   ~D, ~D (~@D,~@D)" xc yc (- xc x) (- yc y))
-    (format t "~%α ~A  δ ~A"
+    (format t "~%ICRS α ~A  δ ~A"
             (format-ra α) (format-dec δ))
     (if (> pk #.(- 65536 256))
         (format t "~%!! Star likely blown !!")
@@ -72,8 +73,8 @@
           (format t "~%Thresh     ~7,1F" thresh)
           (if (>= snr nsigma)
               (print (make-star
-                      :x    xc
-                      :y    yc
+                      :x    xcent
+                      :y    ycent
                       :ra   α
                       :dec  δ
                       :mag  (magn img ampl)
@@ -274,7 +275,7 @@
                    (ksum   fake-ksum)
                    (k2sum  fake-k2sum)
                    (radius fake-radius)) prof
-    (let+ ((box    (move-box box (- x radius) (- y radius)))
+    (let+ ((box    (move-box box (- (round x) radius) (- (round y) radius)))
            (star   (extract-subarray arr box))
            (ssum   (vm:total star))
            (kssum  (vm:inner-prod krnl star))
@@ -345,7 +346,10 @@
                               :radius radius)))
                  (loop for star in stars sum
                          (let+ ((:mvb (_ _ resid-img)
-                                    (measure-flux (img-arr img) (star-y star) (star-x star) prof)))
+                                    (measure-flux (img-arr img)
+                                                  (round (star-y star))
+                                                  (round (star-x star))
+                                                  prof)))
                            (vm:total
                             ;; Squared deviations between core
                             ;; model and star profile,
@@ -455,16 +459,34 @@
                                   ;; mask so that we won't find this
                                   ;; one again.
                                   (zap-peak srch-arr yc xc thr)
-                                  `(,(make-star
-                                      :x    xc
-                                      :y    yc
-                                      :mag  (magn ref-img ampl)
-                                      :snr  (db10 snr)
-                                      :flux ampl
-                                      :sd   tnoise))
-                                  )))
+                                  (let+ ((:mvb (xcent ycent) (centroid himg xc yc)))
+                                    `(,(make-star
+                                        :x    xcent
+                                        :y    ycent
+                                        :mag  (magn ref-img ampl)
+                                        :snr  (db10 snr)
+                                        :flux ampl
+                                        :sd   tnoise))
+                                    ))))
                           )))))
 
+(defun centroid (img xc yc)
+  (let+ ((arr   (img-arr img))
+         (mass 0)
+         (xmass 0)
+         (ymass 0))
+    (loop for iy from (- yc 3) to (+ yc 3) do
+            (loop for ix from (- xc 3) to (+ xc 3) do
+                    (let ((v  (max 0 (aref arr iy ix))))
+                      (incf mass v)
+                      (incf xmass (* (- ix xc) v))
+                      (incf ymass (* (- iy yc) v)))))
+    (if (plusp mass)
+        (values (+ xc (/ xmass mass))
+                (+ yc (/ ymass mass)))
+      (values xc yc))
+    ))
+               
 (defun conj* (z1 z2)
   (* (conjugate z1) z2))
 
@@ -689,7 +711,7 @@
 (defun show-crosscuts (img star)
   (let+ ((x    (star-x star))
          (y    (star-y star))
-         (arr  (extract-subarray (img-arr img) (make-box-of-radius x y 20)))
+         (arr  (extract-subarray (img-arr img) (make-box-of-radius (round x) (round y) 20)))
          (xs   (vm:bipolar-framp 41))
          (hs   (array-row arr 20))
          (vs   (array-col arr 20))
@@ -848,7 +870,7 @@
     ;; detections hilighted in green, saturations in red.
     (let* ((arr     (img-arr img))
            (trimmed (remove-if (lambda (star)
-                                 (< (aref arr (star-y star) (star-x star)) 32768))
+                                 (< (aref arr (round (star-y star)) (round (star-x star))) 32768))
                                stars)))
       (plt:with-delayed-update ('himg)
         (show-img 'himg himg)

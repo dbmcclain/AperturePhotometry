@@ -850,9 +850,9 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
                 :symbol :cross))
     |#
     (phot-limit img)
-    (format t "~%Count   Star Pos      Mag    SNR      Flux      SD      RA      Dec     GMag     dx     dy")
-    (format t "~%         X    Y              dBσ                        deg     deg            arcsec  arcsec")
-    (format t "~%---------------------------------------------------------------------------------------------")
+    (format t "~%Count     Star Pos      Mag     SNR     Flux      SD       RA       Dec     GMag     dx     dy")
+    (format t "~%         X       Y              dBσ                        deg      deg           arcsec arcsec")
+    (format t "~%-----------------------------------------------------------------------------------------------")
     (loop for star in (sort stars #'< :key sort-key)
           for ct from 1
           do
@@ -867,7 +867,7 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
                              (cmag star-catv)
                              (dx   star-dx)
                              (dy   star-dy)) star
-              (format t "~%~4D   ~4D ~4D    ~6,2F  ~6,1F  ~7,2G ~7,2G  ~8,4F  ~7,4F  ~5,2F  ~5,2F  ~5,2F"
+              (format t "~%~4D  ~6,1F  ~6,1F  ~6,2F  ~6,1F  ~7,2G  ~8,2G  ~8,4F  ~7,4F  ~5,2F  ~5,2F  ~5,2F"
                       ;; crude mag adj based on 3c273
                       ct
                       x y
@@ -877,15 +877,43 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
                       (or ra 0.0)
                       (or dec 0.0)
                       (or cmag 0.0)
-                      (* 3600 (or dx   0.0))
-                      (* 3600 (or dy   0.0)))
+                      (or dx   0.0)
+                      (or dy   0.0))
               ))))
 
+#|
+(report-stars *saved-img*)
+|#
+#|
+(defun wtmnsd (xs wts)
+  (let+ ((twt  (vm:total wts))
+         (mn   (/ (vm:total (map 'vector #'* xs wts)) twt))
+         (devs (map 'vector (um:rcurry #'- mn) xs))
+         (sd   (sqrt (/ (vm:total (map 'vector #'* devs devs wts)) twt))))
+    (values mn sd devs)))
+
+(defun stetson-refinement (wts devs sigma &key (alpha 2) (beta 2))
+  (map 'vector (lambda (dev wt)
+                 (/ wt (1+ (expt (/ (abs dev) sigma alpha) beta))))
+       devs wts))
+
+(defun stetson-wtmnsd (xs wts &key (alpha 2) (beta 2) (tol 1e-3))
+  (um:nlet iter ((nwts wts)
+                 (rms  nil))
+    (let+ ((:mvb (mn sd devs) (wtmnsd xs nwts)))
+      (if (and rms
+               (< (abs (- sd rms)) (* tol rms)))
+          (values mn sd devs)
+        (let+ ((new-wts (stetson-refinement wts devs sd :alpha alpha :beta beta)))
+          (go-iter new-wts sd))
+        ))
+    ))
+|#
 (defun show-match (img)
   (let+ ((stars  (remove nil (img-stars img)
                          :key #'star-catv))
-         (xs     (mapcar (um:curry #'* 3600) (mapcar #'star-dx stars)))
-         (ys     (mapcar (um:curry #'* 3600) (mapcar #'star-dy stars)))
+         (xs     (mapcar #'star-dx stars))
+         (ys     (mapcar #'star-dy stars))
          (drs    (mapcar (lambda (dx dy)
                            (abs (complex dx dy)))
                          xs ys))
@@ -898,13 +926,15 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
          (lflux  (map 'vector (um:rcurry #'log 10) flux))
          (minfl  (expt 10 (floor   (reduce #'min lflux))))
          (maxfl  (expt 10 (ceiling (reduce #'max lflux))))
-         (:mvb   (y0 sigma)
-             (linfit:regress-fixed-slope lflux cmags 1 -2.5 :alpha 2 :beta 2)))
+         (snrs   (map 'vector #'star-snr stars))
+         (:mvb (y0 sigma) (linfit:regress-fixed-slope lflux cmags snrs -2.5))
+         )
     (plt:plot 'miss xs ys
               :clear t
               :symbol :cross
               :xrange '(-8 8)
               :yrange '(-8 8)
+              :aspect 1
               :title "Matches: Catalog minus Star"
               :xtitle "dα Cosδ [arcsec]"
               :ytitle "dδ [arcsec]")
@@ -912,7 +942,7 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
                    :clear t
                    :norm  nil
                    :title "Matches: Distance Histogram"
-                   :xtitle "dist [arcsec]"
+                   :xtitle "Radial Dist [arcsec]"
                    :ytitle "Count")
     #|
     (plt:plot 'dmag mags dmags
