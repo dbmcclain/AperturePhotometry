@@ -284,6 +284,14 @@ https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/345/gaia2&-c=240.005064%
                             (setf (aref carr row col) (aref arr srow scol)))
                           )))
         (show-img 'canon cimg)
+        (plt:draw-text 'canon "N"
+                       `((:data ,(round cxc)) (:data 20))
+                       :font-size 16
+                       :color :yellow)
+        (plt:draw-text 'canon "E"
+                       `((:data 10) (:data ,(round cyc)))
+                       :font-size 16
+                       :color :yellow)
         ))))
          
 (defun to-radec (img xp yp)
