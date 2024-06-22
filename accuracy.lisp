@@ -168,6 +168,88 @@ https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/345/gaia2&-c=240.005064%
     (values (mod thet 360)
             phi)))
 
+(defun parallactic-angle (img)
+  (let+ ((hdr    (img-hdr img))
+         ;; Center coords
+         (cr_ra  (nquery-header hdr "CRVAL1"))
+         (cr_dec (nquery-header hdr "CRVAL2"))
+         (cr_x   (nquery-header hdr "CRPIX1"))
+         (cr_y   (nquery-header hdr "CRPIX2"))
+
+         ;; transform from pixels to IWS
+         (cd1_1  (nquery-header hdr "CD1_1"))
+         (cd1_2  (nquery-header hdr "CD1_2"))
+         (cd2_1  (nquery-header hdr "CD2_1"))
+         (cd2_2  (nquery-header hdr "CD2_2"))
+
+         ;; X projections to go from IWS to RA, Dec
+         (a_0_0  (nquery-header hdr "A_0_0"))
+         (a_0_1  (nquery-header hdr "A_0_1"))
+         (a_0_2  (nquery-header hdr "A_0_2"))
+         (a_1_0  (nquery-header hdr "A_1_0"))
+         (a_1_1  (nquery-header hdr "A_1_1"))
+         (a_2_0  (nquery-header hdr "A_2_0"))
+
+         ;; Y projections
+         (b_0_0  (nquery-header hdr "B_0_0"))
+         (b_0_1  (nquery-header hdr "B_0_1"))
+         (b_0_2  (nquery-header hdr "B_0_2"))
+         (b_1_0  (nquery-header hdr "B_1_0"))
+         (b_1_1  (nquery-header hdr "B_1_1"))
+         (b_2_0  (nquery-header hdr "B_2_0"))
+
+         (:mvb (_ th)  (rtopd cd1_1 cd1_2)))
+    (+ th 180)
+    ))
+
+#|
+(parallactic-angle *saved-img*)
+(canon-view *saved-img*)
+ |#
+
+(defun canon-view (img)
+  (let ((th (parallactic-angle img)))
+    (labels ((proj (x y)
+               (let+ ((:mvb (rho phi)
+                          (rtopd x y)))
+                 (ptord rho (- phi th))
+                 ))
+             (inv-proj (x y)
+               (let+ ((:mvb (rho phi)
+                          (rtopd x y)))
+                 (ptord rho (+ phi th)))))
+      (let+ ((arr (img-arr img))
+             ((ht wd) (array-dimensions arr))
+             (:mvb (xtl ytl) (proj 0  0))
+             (:mvb (xtr ytr) (proj wd 0))
+             (:mvb (xbr ybr) (proj wd ht))
+             (:mvb (xbl ybl) (proj 0  ht))
+             (lf   (min xtl xbl xtr xbr))
+             (rt   (max xtr xbr xtl xbl))
+             (tp   (min ytl ytr ybl ybr))
+             (bt   (max ybl ybr ytl ytr))
+             (xc   (/ wd 2))
+             (yc   (/ ht 2))
+             (cwd  (ceiling (- rt lf)))
+             (cht  (ceiling (- bt tp)))
+             (cxc  (/ cwd 2))
+             (cyc  (/ cht 2))
+             (carr (make-image-array cht cwd :initial-element 0f0))
+             (cimg (copy-img img)))
+        (setf (img-arr cimg) carr
+              (img-canon cimg) (list th xc yc cxc cyc arr))
+        (loop for row from 0 below cht do
+                (loop for col from 0 below cwd do
+                        (let+ ((:mvb (sx sy) (inv-proj (- col cxc) (- row cyc)))
+                               (srow (round (+ sy yc)))
+                               (scol (round (+ sx xc))))
+                          (when (array-in-bounds-p arr srow scol)
+                            (setf (aref carr row col) (aref arr srow scol)))
+                          )))
+        (show-img 'canon cimg)
+        ))))
+          
+         
 (defun to-radec (img xp yp)
   (let+ ((hdr    (img-hdr img))
          ;; Center coords

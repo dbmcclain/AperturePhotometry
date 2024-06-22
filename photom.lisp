@@ -81,7 +81,8 @@
   s0sq
   himg
   cat
-  ncat)
+  ncat
+  canon)
 
 (defstruct star
   x y mag snr flux sd ra dec catv dx dy)
@@ -884,12 +885,20 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
 #|
 (report-stars *saved-img*)
 |#
-#|
-(defun wtmnsd (xs wts)
-  (let+ ((twt  (vm:total wts))
+
+;; ------------------------------------------------------------
+
+(defun wt-mnsd (xs wts)
+  (let+ ((wts  (if (realp wts)
+                   (make-array (length xs)
+                               :intitial-element wts)
+                 wts))
+         (twt  (vm:total wts))
          (mn   (/ (vm:total (map 'vector #'* xs wts)) twt))
          (devs (map 'vector (um:rcurry #'- mn) xs))
-         (sd   (sqrt (/ (vm:total (map 'vector #'* devs devs wts)) twt))))
+         (nel  (length wts))
+         (sd   (sqrt (/ (vm:total (map 'vector #'* devs devs wts))
+                        twt (/ (1- nel) nel)))))
     (values mn sd devs)))
 
 (defun stetson-refinement (wts devs sigma &key (alpha 2) (beta 2))
@@ -897,31 +906,35 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
                  (/ wt (1+ (expt (/ (abs dev) sigma alpha) beta))))
        devs wts))
 
-(defun stetson-wtmnsd (xs wts &key (alpha 2) (beta 2) (tol 1e-3))
-  (um:nlet iter ((nwts wts)
-                 (rms  nil))
-    (let+ ((:mvb (mn sd devs) (wtmnsd xs nwts)))
-      (if (and rms
-               (< (abs (- sd rms)) (* tol rms)))
-          (values mn sd devs)
-        (let+ ((new-wts (stetson-refinement wts devs sd :alpha alpha :beta beta)))
-          (go-iter new-wts sd))
-        ))
-    ))
-|#
+(defun stetson-wt-mnsd (xs wts &key (alpha 2) (beta 2) (tol 1e-3))
+  (let+ ((wts  (if (realp wts)
+                   (make-array (length xs)
+                               :intitial-element wts)
+                 wts)))
+    (um:nlet iter ((nwts wts)
+                   (rms  nil))
+      (let+ ((:mvb (mn sd devs) (wt-mnsd xs nwts)))
+        (if (and rms
+                 (< (abs (- sd rms)) (* tol rms)))
+            (values mn sd devs)
+          (let+ ((new-wts (stetson-refinement wts devs sd :alpha alpha :beta beta)))
+            (go-iter new-wts sd))
+          ))
+      )))
+
+;; ------------------------------------------------------------
+
 (defun show-match (img)
   (let+ ((stars  (remove nil (img-stars img)
-                         :key #'star-catv))
+                         :key #'star-catv)) ;; remove any found stars without catalog matches
          (xs     (mapcar #'star-dx stars))
          (ys     (mapcar #'star-dy stars))
          (drs    (mapcar (lambda (dx dy)
                            (abs (complex dx dy)))
                          xs ys))
-         ;; (mags   (map 'vector #'star-mag stars))
          (cmags  (map 'vector #'star-catv stars))
          (mincm  (reduce #'min cmags))
          (maxcm  (reduce #'max cmags))
-         ;; (dmags  (map 'vector #'- mags cmags))
          (flux   (map 'vector #'star-flux stars))
          (lflux  (map 'vector (um:rcurry #'log 10) flux))
          (minfl  (expt 10 (floor   (reduce #'min lflux))))
@@ -929,15 +942,21 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
          (snrs   (map 'vector #'star-snr stars))
          (:mvb (y0 sigma) (linfit:regress-fixed-slope lflux cmags snrs -2.5))
          )
-    (plt:plot 'miss xs ys
-              :clear t
-              :symbol :cross
-              :xrange '(-8 8)
-              :yrange '(-8 8)
-              :aspect 1
-              :title "Matches: Catalog minus Star"
-              :xtitle "dα Cosδ [arcsec]"
-              :ytitle "dδ [arcsec]")
+    (let+ ((:mvb (mn sd) (linfit:wmnsd drs snrs)))
+      (plt:plot 'miss xs ys
+                :clear t
+                :symbol :dot
+                :xrange '(-8 8)
+                :yrange '(-8 8)
+                :aspect 1
+                :alpha 0.3
+                :title "Matches: Catalog minus Star"
+                :xtitle "dα Cosδ [arcsec]"
+                :ytitle "dδ [arcsec]")
+      (plt:draw-text 'miss
+                     (format nil "Mean Radial Δ: ~5,2F (~5,2F)" mn sd)
+                     '((:frac 0.05) (:frac 0.85)))
+      )
     (plt:histogram 'hmiss drs
                    :clear t
                    :norm  nil
@@ -965,7 +984,8 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
               :xtitle "Flux [e-]"
               :ytitle "Cat GMag [mag]")
     (plt:plot 'zp flux cmags
-              :symbol :dot)
+              :symbol :dot
+              :alpha 0.5)
     (plt:draw-text 'zp
                    (format nil "Mag Offs = ~5,2F" y0)
                    '((:frac 0.1) (:frac 0.85)))
@@ -977,7 +997,8 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
       (dolist (star (img-stars img))
         (incf (star-mag star) dmag))
       (setf (img-mag-off img) y0))
-    (show-img 'img img)
+    ;; (show-img 'img img)
+    (canon-view img)
     ))
 
 #|

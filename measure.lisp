@@ -41,51 +41,64 @@
 (defun db10 (x)
   (* 10 (log x 10)))
 
-(defun measure-location (img x y &key (srch-radius 4))
-  (let+ ((himg         (img-himg img))
-         (arr          (img-arr img))
-         (med          (img-med img))
-         (harr         (img-arr himg))
-         (s0sq         (img-s0sq img))
-         (nsigma       (img-thr img))
-         (srch-box     (make-box-of-radius x y srch-radius))
-         (:mvb (yc xc) (array-max-pos-in-box harr srch-box))
-         (:mvb (xcent ycent) (centroid himg xc yc))
-         (:mvb (α δ)   (to-radec img xcent ycent))
-         (ampl         (aref harr yc xc))
-         (pk           (aref arr yc xc)))
-    (format t "~%Cursor position ~D, ~D" x y)
-    (format t "~%Peak position   ~D, ~D (~@D,~@D)" xc yc (- xc x) (- yc y))
-    (format t "~%ICRS α ~A  δ ~A"
-            (format-ra α) (format-dec δ))
-    (if (> pk #.(- 65536 256))
-        (format t "~%!! Star likely blown !!")
-      (when (> pk 32768)
-        (format t "~%!! Star possibly in saturation !!")
-        ))
-    (if (plusp ampl)
-        (let+ ((gain   (img-gain img)) ;; e-/ADU
-               (ampl   (* gain ampl))
-               (tnoise (sqrt (+ ampl (* gain gain s0sq))))
-               (thresh (* nsigma tnoise))
-               (snr    (/ ampl tnoise)))
-          (format t "~%Peak value ~7,1F (raw ~D)" ampl (round pk))
-          (format t "~%Thresh     ~7,1F" thresh)
-          (if (>= snr nsigma)
-              (print (make-star
-                      :x    xcent
-                      :y    ycent
-                      :ra   α
-                      :dec  δ
-                      :mag  (magn img ampl)
-                      :snr  (db10 snr)
-                      :flux ampl
-                      :sd   tnoise))
-            (format t "~%Failed: Sum below threshold:~%   Mag ≈ ~4,1F  SNR ≈ ~3,1F"
-                    (magn img ampl) snr)))
-      (format t "~%Failed: Fitted amplitude not positive,~%   central peak ≈ ~4,1F mag"
-              (magn img (- (aref arr yc xc) med)))
+(defun canon-xform (img x y)
+  (let ((info (img-canon img)))
+    (if info
+        (let+ (( (th xc yc cxc cyc arr) info)
+               (:mvb (rho phi) (rtopd (- x cxc) (- y cyc)))
+               (:mvb (xx yy) (ptord rho (+ th phi))))
+          (values (round (+ xx xc))
+                  (round (+ yy yc))
+                  arr))
+      (values (round x) (round y) (img-arr img))
       )))
+
+(defun measure-location (img x y &key (srch-radius 4))
+  (let+ ((:mvb (xx yy arr) (canon-xform img x y)))
+    (when (array-in-bounds-p arr yy xx)
+      (let+ ((himg         (img-himg img))
+             (harr         (img-arr himg))
+             (med          (img-med img))
+             (s0sq         (img-s0sq img))
+             (nsigma       (img-thr img))
+             (srch-box     (make-box-of-radius xx yy srch-radius))
+             (:mvb (yc xc) (array-max-pos-in-box harr srch-box))
+             (:mvb (xcent ycent) (centroid himg xc yc))
+             (:mvb (α δ)   (to-radec img xcent ycent))
+             (ampl         (aref harr yc xc))
+             (pk           (aref arr yc xc)))
+        (format t "~%Cursor position ~D, ~D" xx yy)
+        (format t "~%Peak position   ~D, ~D (~@D,~@D)" xc yc (- xc xx) (- yc yy))
+        (format t "~%ICRS α ~A  δ ~A"
+                (format-ra α) (format-dec δ))
+        (if (> pk #.(- 65536 256))
+            (format t "~%!! Star likely blown !!")
+          (when (> pk 32768)
+            (format t "~%!! Star possibly in saturation !!")
+            ))
+        (if (plusp ampl)
+            (let+ ((gain   (img-gain img)) ;; e-/ADU
+                   (ampl   (* gain ampl))
+                   (tnoise (sqrt (+ ampl (* gain gain s0sq))))
+                   (thresh (* nsigma tnoise))
+                   (snr    (/ ampl tnoise)))
+              (format t "~%Peak value ~7,1F (raw ~D)" ampl (round pk))
+              (format t "~%Thresh     ~7,1F" thresh)
+              (if (>= snr nsigma)
+                  (print (make-star
+                          :x    xcent
+                          :y    ycent
+                          :ra   α
+                          :dec  δ
+                          :mag  (magn img ampl)
+                          :snr  (db10 snr)
+                          :flux ampl
+                          :sd   tnoise))
+                (format t "~%Failed: Sum below threshold:~%   Mag ≈ ~4,1F  SNR ≈ ~3,1F"
+                        (magn img ampl) snr)))
+          (format t "~%Failed: Fitted amplitude not positive,~%   central peak ≈ ~4,1F mag"
+                  (magn img (- (aref arr yc xc) med)))
+          )))))
 
 ;; -------------------------------------------------------------------
 ;; Automated Star Detection and Measurement
@@ -682,15 +695,17 @@
     (lambda (pane x y xx yy)
       ;; x, y are CAPI mouse coords,
       ;; xx, yy are star image array coords.
-      (let ((star (find-nearest-star star-db xx yy)))
-        (when star
-          (let ((txt (format nil "~4,1F" (star-mag star))))
-            (capi:display-tooltip pane
-                                  :x  (+ x 10)
-                                  :y  (+ y 10)
-                                  :text txt)
-            ))
-        ))))
+      (let+ ((:mvb (_xx _yy arr) (canon-xform img xx yy)))
+        (when (array-in-bounds-p arr _yy _xx)
+          (let+ ((star (find-nearest-star star-db _xx _yy)))
+            (when star
+              (let ((txt (format nil "~4,1F" (star-mag star))))
+                (capi:display-tooltip pane
+                                      :x  (+ x 10)
+                                      :y  (+ y 10)
+                                      :text txt)
+                ))
+            ))))))
         
 ;; ---------------------------------------------------------------
 
@@ -709,31 +724,33 @@
     ))
 
 (defun show-crosscuts (img star)
-  (let+ ((x    (star-x star))
-         (y    (star-y star))
-         (arr  (extract-subarray (img-arr img) (make-box-of-radius (round x) (round y) 20)))
-         (xs   (vm:bipolar-framp 41))
-         (hs   (array-row arr 20))
-         (vs   (array-col arr 20))
-         (lo   (* 10 (1- (floor (min (reduce #'min hs) (reduce #'min vs)) 10))))
-         (hi   (* 10 (1+ (ceiling (max (reduce #'max hs) (reduce #'max vs)) 10)))))
-    (plt:plot 'crosscuts xs hs
-              :clear t
-              :title  "Image Cross Cuts"
-              :xtitle "Pixel Position"
-              :ytitle "Image Amplitude [du]"
-              :thick  2
-              :line-type :histo
-              :yrange `(,lo ,hi)
-              :alpha 0.5
-              :legend "X")
-    (plt:plot 'crosscuts xs vs
-              :thick 2
-              :color :red
-              :alpha 0.5
-              :line-type :histo
-              :legend "Y")
-    ))
+  (let+ ((x    (round (star-x star)))
+         (y    (round (star-y star)))
+         (arr  (img-arr img)))
+    (when (array-in-bounds-p arr y x)
+      (let+ ((arr  (extract-subarray (img-arr img) (make-box-of-radius (round x) (round y) 20)))
+             (xs   (vm:bipolar-framp 41))
+             (hs   (array-row arr 20))
+             (vs   (array-col arr 20))
+             (lo   (* 10 (1- (floor (min (reduce #'min hs) (reduce #'min vs)) 10))))
+             (hi   (* 10 (1+ (ceiling (max (reduce #'max hs) (reduce #'max vs)) 10)))))
+        (plt:plot 'crosscuts xs hs
+                  :clear t
+                  :title  "Image Cross Cuts"
+                  :xtitle "Pixel Position"
+                  :ytitle "Image Amplitude [du]"
+                  :thick  2
+                  :line-type :histo
+                  :yrange `(,lo ,hi)
+                  :alpha 0.5
+                  :legend "X")
+        (plt:plot 'crosscuts xs vs
+                  :thick 2
+                  :color :red
+                  :alpha 0.5
+                  :line-type :histo
+                  :legend "Y")
+        ))))
 
 (defun star-explain (img)
   ;; mouse left-click on star or region puts up a popup containing all the details...
@@ -750,13 +767,17 @@
          (when (star-p ans)
            (mp:funcall-async #'recal img ans)))
         (t
-         (let ((star (if (star-p ans)
-                         ans
-                       (make-star
-                        :x  (round xc)
-                        :y  (round yc)
-                        ))))
-           (mp:funcall-async #'show-crosscuts img star))))
+         (let+ ((ximg (copy-img img))
+                (:mvb (xx yy arr) (canon-xform ximg xc yc))
+                (star (if (star-p ans)
+                          ans
+                        (make-star
+                         :x  xx
+                         :y  yy
+                         ))))
+           (when (array-in-bounds-p arr yy xx)
+             (setf (img-arr ximg) arr)
+             (mp:funcall-async #'show-crosscuts ximg star)))))
       txt  ;; needs to return the text to display in a popup
       )))
 
