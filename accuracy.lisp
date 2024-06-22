@@ -170,54 +170,83 @@ https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/345/gaia2&-c=240.005064%
 
 (defun parallactic-angle (img)
   (let+ ((hdr    (img-hdr img))
-         ;; Center coords
-         (cr_ra  (nquery-header hdr "CRVAL1"))
-         (cr_dec (nquery-header hdr "CRVAL2"))
-         (cr_x   (nquery-header hdr "CRPIX1"))
-         (cr_y   (nquery-header hdr "CRPIX2"))
-
          ;; transform from pixels to IWS
          (cd1_1  (nquery-header hdr "CD1_1"))
          (cd1_2  (nquery-header hdr "CD1_2"))
          (cd2_1  (nquery-header hdr "CD2_1"))
          (cd2_2  (nquery-header hdr "CD2_2"))
-
-         ;; X projections to go from IWS to RA, Dec
-         (a_0_0  (nquery-header hdr "A_0_0"))
-         (a_0_1  (nquery-header hdr "A_0_1"))
-         (a_0_2  (nquery-header hdr "A_0_2"))
-         (a_1_0  (nquery-header hdr "A_1_0"))
-         (a_1_1  (nquery-header hdr "A_1_1"))
-         (a_2_0  (nquery-header hdr "A_2_0"))
-
-         ;; Y projections
-         (b_0_0  (nquery-header hdr "B_0_0"))
-         (b_0_1  (nquery-header hdr "B_0_1"))
-         (b_0_2  (nquery-header hdr "B_0_2"))
-         (b_1_0  (nquery-header hdr "B_1_0"))
-         (b_1_1  (nquery-header hdr "B_1_1"))
-         (b_2_0  (nquery-header hdr "B_2_0"))
-
          (:mvb (_ th)  (rtopd cd1_1 cd1_2)))
-    (+ th 180)
+    th
     ))
 
 #|
 (parallactic-angle *saved-img*)
 (canon-view *saved-img*)
+(show-img 'img *saved-img*)
  |#
 
+;; ---------------------------------------------------
+
+(defstruct rotxform
+  theta   ;; parallactic angle + 180 deg
+  xf1_1   ;; Cos theta
+  xf1_2   ;; Sin theta
+  xc      ;; (xc, yc) center of untilted image
+  yc
+  cxc     ;; (cxc, cyx) center of tilted (canonical) image
+  cyc
+  arr)    ;; original img array of untilted img
+
+(defun rotxform (xform x y)
+  ;; Transform from untilted image to tilted
+  (with-accessors ((xf1_1   rotxform-xf1_1)
+                   (xf1_2   rotxform-xf1_2)
+                   (xc      rotxform-xc)
+                   (yc      rotxform-yc)
+                   (cxc     rotxform-cxc)
+                   (cyc     rotxform-cyc)) xform
+    (let+ ((xmc  (- x xc))
+           (ymc  (- y yc))
+           (cxmc (+ (* xmc xf1_1) (* ymc xf1_2)))
+           (cymc (- (* ymc xf1_1) (* xmc xf1_2))))
+      (values
+       (+ cxmc cxc)
+       (+ cymc cyc))
+      )))
+
+(defun inv-rotxform (xform x y)
+  ;; Transform from tilted image to untilted
+  (with-accessors ((xf1_1   rotxform-xf1_1)
+                   (xf1_2   rotxform-xf1_2)
+                   (xc      rotxform-xc)
+                   (yc      rotxform-yc)
+                   (cxc     rotxform-cxc)
+                   (cyc     rotxform-cyc)) xform
+    (let+ ((cxmc  (- x cxc))
+           (cymc  (- y cyc))
+           (xmc   (- (* cxmc xf1_1) (* cymc xf1_2)))
+           (ymc   (+ (* cymc xf1_1) (* cxmc xf1_2))))
+      (values
+       (+ xmc xc)
+       (+ ymc yc))
+      )))
+
+;; ---------------------------------------------------
+
 (defun canon-view (img)
-  (let ((th (parallactic-angle img)))
-    (labels ((proj (x y)
-               (let+ ((:mvb (rho phi)
-                          (rtopd x y)))
-                 (ptord rho (- phi th))
-                 ))
+  (let+ ((th    (+ 180 (parallactic-angle img)))
+         (cisth (cis (dtor th)))
+         (xf1_1 (realpart cisth))
+         (xf1_2 (imagpart cisth)))
+    (labels (#||#
+             (proj (x y)
+               (values
+                (+ (* x xf1_1) (* y xf1_2))
+                (- (* y xf1_1) (* x xf1_2))))
              (inv-proj (x y)
-               (let+ ((:mvb (rho phi)
-                          (rtopd x y)))
-                 (ptord rho (+ phi th)))))
+               (values
+                (- (* x xf1_1) (* y xf1_2))
+                (+ (* x xf1_2) (* y xf1_1)))))
       (let+ ((arr (img-arr img))
              ((ht wd) (array-dimensions arr))
              (:mvb (xtl ytl) (proj 0  0))
@@ -237,7 +266,15 @@ https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/345/gaia2&-c=240.005064%
              (carr (make-image-array cht cwd :initial-element 0f0))
              (cimg (copy-img img)))
         (setf (img-arr cimg) carr
-              (img-canon cimg) (list th xc yc cxc cyc arr))
+              (img-canon cimg) (make-rotxform
+                                :arr   arr
+                                :theta th
+                                :xf1_1 xf1_1
+                                :xf1_2 xf1_2
+                                :xc    xc
+                                :yc    yc
+                                :cxc   cxc
+                                :cyc   cyc))
         (loop for row from 0 below cht do
                 (loop for col from 0 below cwd do
                         (let+ ((:mvb (sx sy) (inv-proj (- col cxc) (- row cyc)))
@@ -248,7 +285,6 @@ https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/345/gaia2&-c=240.005064%
                           )))
         (show-img 'canon cimg)
         ))))
-          
          
 (defun to-radec (img xp yp)
   (let+ ((hdr    (img-hdr img))
@@ -322,6 +358,7 @@ https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/345/gaia2&-c=240.005064%
              (iwc-to-xyz (dx dy)
                (let+ ((x (- (dtor dx)))
                       (y (dtor dy))
+                      ;; vector r is plate center
                       ((rx ry rz) (radec2xyz cr_ra cr_dec))
                       ;; vector i is r ✕ NCP
                       (norm (abs (complex rx ry)))

@@ -42,15 +42,16 @@
   (* 10 (log x 10)))
 
 (defun canon-xform (img x y)
+  ;; Maybe transform from tilted image to untilted
   (let ((info (img-canon img)))
     (if info
-        (let+ (( (th xc yc cxc cyc arr) info)
-               (:mvb (rho phi) (rtopd (- x cxc) (- y cyc)))
-               (:mvb (xx yy) (ptord rho (+ th phi))))
-          (values (round (+ xx xc))
-                  (round (+ yy yc))
-                  arr))
-      (values (round x) (round y) (img-arr img))
+        (let+ ((:mvb (xu yu) (inv-rotxform info x y)))
+          (values (round xu)
+                  (round yu)
+                  (rotxform-arr info)))
+      (values (round x)
+              (round y)
+              (img-arr img))
       )))
 
 (defun measure-location (img x y &key (srch-radius 4))
