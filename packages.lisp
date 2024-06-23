@@ -2,7 +2,7 @@
 (in-package :cl-user)
 
 (defpackage #:com.ral.photometry
-  (:use #:common-lisp #:def*)
+  (:use #:common-lisp #:def* #:ac)
   (:export
    ))
 

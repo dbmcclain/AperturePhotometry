@@ -109,26 +109,35 @@
     (terpri)
     (format t "~%Channel ~A:" chan)
     (let+ ((img (extract-image path chan))
-           (s0sq (s0sq img)))
+           (s0sq (s0sq img))
+           (meas (create
+                  (lambda (cust)
+                    (measure-stars img)
+                    (get-star-positions img)
+                    (send cust))))
+           (cat  (create
+                  (lambda (cust)
+                    (get-catalog img)
+                    (send cust)))))
       (setf (img-s0sq img) s0sq)
       (let ((vmax (reduce #'max (vm:make-overlay-vector (img-arr img))))) 
         (if (> vmax #.(- 65526 256))
             (warn "Image likely contains blown-out stars")
           (when (> vmax 32768)
             (warn "Image possibly contains saturated stars"))))
-      (measure-stars img)
-      (get-star-positions img)
-      (get-catalog img)
-      (find-stars-in-cat img)
-      (show-match img)
-      (report-stars img)
-      img
+      (β _
+          (progn
+            (send (fork meas cat) β)
+            img)
+        (find-stars-in-cat img)
+        (show-match img)
+        (report-stars img))
       )))
 
 #|
 (with-seestar
   (setf *saved-img* (photom)))
- |#
+|#
 ;; ------------------------------------------------------------------------------
 ;; Subslices of images...
 #|

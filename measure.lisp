@@ -359,21 +359,25 @@
                               :theta  (aref vec 2)
                               :radius radius)))
                  (loop for star in stars sum
-                         (let+ ((:mvb (_ _ resid-img)
-                                    (measure-flux (img-arr img)
-                                                  (round (star-y star))
-                                                  (round (star-x star))
-                                                  prof)))
-                           (vm:total
-                            ;; Squared deviations between core
-                            ;; model and star profile,
-                            (map-array (lambda (resid-val)
-                                         (coerce
-                                          (sqr resid-val)
-                                          'single-float))
-                                       resid-img))
-                           ))
-                 )))
+                         (handler-case
+                             (let+ ((:mvb (_ _ resid-img)
+                                        (measure-flux (img-arr img)
+                                                      (round (star-y star))
+                                                      (round (star-x star))
+                                                      prof)))
+                               (vm:total
+                                ;; Squared deviations between core
+                                ;; model and star profile,
+                                (map-array (lambda (resid-val)
+                                             (coerce
+                                              (sqr resid-val)
+                                              'single-float))
+                                           resid-img)))
+                           (error ()
+                             ;; just ignore - star probably too close to edge of image
+                             0
+                             ))
+                       ))))
       (let+ ((:mvb (vfit _ niter)
                  (vm:simplex #'quality-sum (apply #'vector fit-args)))
              (sigma1  (aref vfit 0))
@@ -389,17 +393,20 @@
              (twt     0)
              (resid   nil))
         (loop for star in stars do
-                (let+ ((:mvb (ampl _ resid-img)
-                           (measure-flux (img-arr img) (star-y star) (star-x star) prof)))
-                  (incf twt ampl)
-                  (if resid
-                      (map-array-into resid (lambda (r s)
-                                              (coerce (+ r s) 'single-float))
-                                      resid resid-img)
-                    (setf resid (map-array (lambda (r)
-                                             (coerce r 'single-float))
-                                           resid-img)))
-                  ))
+                (handler-case
+                    (let+ ((:mvb (ampl _ resid-img)
+                               (measure-flux (img-arr img) (star-y star) (star-x star) prof)))
+                      (incf twt ampl)
+                      (if resid
+                          (map-array-into resid (lambda (r s)
+                                                  (coerce (+ r s) 'single-float))
+                                          resid resid-img)
+                        (setf resid (map-array (lambda (r)
+                                                 (coerce r 'single-float))
+                                               resid-img))))
+                  (error ()
+                    ;; just skip the star
+                    )))
         (map-array-into resid (um:rcurry #'/ (coerce twt 'single-float)) resid)
         ;; Show weighted mean, amplitude normalized, residual image
         ;; in the sense (Star - Gaussian).
