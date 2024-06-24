@@ -284,16 +284,81 @@ https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/345/gaia2&-c=240.005064%
                             (setf (aref carr row col) (aref arr srow scol)))
                           )))
         (show-img 'canon cimg)
-        (plt:draw-text 'canon "N"
-                       `((:data ,(round cxc)) (:data 20))
-                       :font-size 16
-                       :color :yellow)
-        (plt:draw-text 'canon "E"
-                       `((:data 10) (:data ,(round cyc)))
-                       :font-size 16
-                       :color :yellow)
+        (annotate-cimg cimg)
         ))))
-         
+
+(defun annotate-cimg (img)
+  (plt:with-delayed-update ('canon)
+    (let+ ((arr  (img-arr img))
+           ((ht wd) (array-dimensions arr))
+           (info    (img-canon img))
+           (:mvb (α1 δ1) (let+ ((:mvb (xu yu) (inv-rotxform info 0 0)))
+                           (to-radec img xu yu)))
+           (:mvb (α0 δ0) (let+ ((:mvb (xu yu) (inv-rotxform info wd ht)))
+                           (to-radec img xu yu)))
+           (α-lo (floor α0))
+           (α-hi (ceiling α1))
+           (δ-lo (floor δ0))
+           (δ-hi (ceiling δ1)))
+      (assert (< α0 α1))
+      (assert (< δ0 δ1))
+      (plt:draw-text 'canon "N"
+                     `((:data ,(round wd 2)) (:data 20))
+                     :font-size 16
+                     :color :yellow)
+      (plt:draw-text 'canon "E"
+                     `((:data 5) (:data ,(round ht 2)))
+                     :font-size 16
+                     :color :yellow)
+      ;; Uniform grid assumes that plate distortions are visually imperceptible
+      (labels ((ra-to-x (α)
+                 (* wd (/ (- α α0) (- α1 α0))))
+               (dec-to-y (δ)
+                 (* ht (- 1 (/ (- δ δ0) (- δ1 δ0))))))
+        (loop for α from α-lo below α-hi by 1/12 do
+                (let ((x  (ra-to-x α)))
+                  (when (< 0 x wd)
+                    (plt:plot 'canon `(,x ,x) `(0 ,ht)
+                              :color :gray50
+                              :alpha 0.35))))
+        (loop for α from α-lo below α-hi by 1 do
+                (let ((x  (ra-to-x α)))
+                  (when (< 0 x wd)
+                    (plt:plot 'canon `(,x ,x) `(0 ,ht)
+                              :color :gray50
+                              :alpha 0.5)
+                    (plt:draw-text 'canon (format-ra α)
+                                   `((:data ,x) (:frac 0.02))
+                                   :align :ctr
+                                   :color :yellow
+                                   :alpha 0.5))))
+        (loop for δ from δ-lo below δ-hi by 1/12 do
+                (let ((y  (dec-to-y δ)))
+                  (when (< 0 y ht)
+                    (plt:plot 'canon `(0 ,wd) `(,y ,y)
+                              :color :gray50
+                              :alpha 0.35))))
+        (loop for δ from δ-lo below δ-hi by 1 do
+                (let ((y  (dec-to-y δ)))
+                  (when (< 0 y ht)
+                    (print y)
+                    (plt:plot 'canon `(0 ,wd) `(,y ,y)
+                              :color :gray50
+                              :alpha 0.5)
+                    (plt:draw-text 'canon (format-dec δ)
+                                   `((:frac 0.98) (:data ,y))
+                                   :align :e
+                                   :color :yellow
+                                   :alpha 0.5))))
+              ))))
+
+#|
+(parallactic-angle *saved-img*)
+(canon-view *saved-img*)
+(show-img 'img *saved-img*)
+ |#
+
+
 (defun to-radec (img xp yp)
   (let+ ((hdr    (img-hdr img))
          ;; Center coords

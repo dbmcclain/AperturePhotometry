@@ -146,18 +146,18 @@
         (if (> zlf zfwd)
             (if (> zlf zstart)
                 (locate-peak arr y (1+ x))
-              (values y x))
+              (values y x zstart))
           (if (> zfwd zstart)
               (locate-peak arr (1+ y) x)
-            (values y x)))
+            (values y x zstart)))
       ;; else - zlf <= zfwd
       (if (> zrt zfwd)
           (if (> zrt zstart)
               (locate-peak arr y (1- x))
-            (values y x))
+            (values y x zstart))
         (if (> zfwd zstart)
             (locate-peak arr (1+ y) x)
-          (values y x))))
+          (values y x zstart))))
     ))
 
 (defun zap-peak (arr y x thr)
@@ -343,7 +343,7 @@
 (defun acceptable-training-star-p (img star)
   ;; Improvements will be based on stars
   ;; with flux: 4000 < adu < 32758
-  (let ((z (/ (star-flux star) (img-gain img))))
+  (let ((z  (star-pk star)))
     (or (< z  4000)
         (> z 32768))
     ))
@@ -470,7 +470,7 @@
             (loop for y from (box-top srch-box) below (box-bottom srch-box) nconc
                     (loop for x from (box-left srch-box) below (box-right srch-box) nconc
                             (when (>= (bref srch-arr y x) mult-thr)
-                              (let+ ((:mvb (yc xc)   (locate-peak srch-arr y x))
+                              (let+ ((:mvb (yc xc pk)   (locate-peak srch-arr y x))
                                      (gain   (img-gain ref-img)) ;; e-/ADU
                                      (ampl   (* gain (aref harr yc xc)))
                                      (tnoise (sqrt (+ ampl (* gain gain s0sq))))
@@ -484,6 +484,7 @@
                                     `(,(make-star
                                         :x    xcent
                                         :y    ycent
+                                        :pk   pk
                                         :mag  (magn ref-img ampl)
                                         :snr  (db10 snr)
                                         :flux ampl
@@ -817,7 +818,7 @@
         (setf lo (+ med (truncate flux 2))
               hi (+ med (round flux)))))
      )
-    (plt:window pane :xsize xsize :ysize ysize)
+    (plt:window pane :xsize xsize :ysize ysize :box `(0 0 ,xsize ,ysize))
     (plt:tvscl pane arr
                :clear  t
                ;; :neg t

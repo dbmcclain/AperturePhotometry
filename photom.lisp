@@ -85,7 +85,7 @@
   canon)
 
 (defstruct star
-  x y mag snr flux sd ra dec catv dx dy)
+  x y pk mag snr flux sd ra dec catv dx dy)
 
 (defstruct fake
   krnl Δ npix ksum k2sum radius sigma box)
