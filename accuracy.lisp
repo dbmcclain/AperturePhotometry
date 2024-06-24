@@ -326,8 +326,8 @@ https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/345/gaia2&-c=240.005064%
                (:mvb (α0t _ ) (pix-to-radec wd 0))
                (:mvb (α0b δ0) (pix-to-radec wd ht))
                (:mvb (α1b _)  (pix-to-radec 0 ht))
-               (α-lo (floor α0b))
-               (α-hi (ceiling α1b))
+               (α-lo (floor (min α0b α0t)))
+               (α-hi (ceiling (max α1b α1t)))
                (δ-lo (floor δ0))
                (δ-hi (ceiling δ1)))
           ;; Uniform grid assumes that plate distortions are visually
@@ -343,41 +343,37 @@ https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/345/gaia2&-c=240.005064%
             (loop for α from α-lo below α-hi by 1/12 do
                     (let ((xt  (ra-to-x-top α))
                           (xb  (ra-to-x-bot α)))
-                      (when (< 0 xb wd)
-                        (plt:plot 'canon `(,xb ,xt) `(,ht 0)
-                                  :color :gray50
-                                  :alpha 0.5))))
+                      (plt:plot 'canon `(,xb ,xt) `(,ht 0)
+                                :color :gray50
+                                :alpha 0.5)))
             (loop for α from α-lo below α-hi by 1/4 do
                     (let ((xt  (ra-to-x-top α))
                           (xb  (ra-to-x-bot α)))
-                      (when (< 0 xb wd)
-                        (plt:plot 'canon `(,xb ,xt) `(,ht 0)
-                                  :color :gray50
-                                  :thick 2
-                                  :alpha 0.5)
-                        (plt:draw-text 'canon (short-format-ra α)
-                                       `((:data ,xb) (:frac 0.02))
-                                       :align :ctr
-                                       :color :yellow
-                                       :alpha 0.5))))
+                      (plt:plot 'canon `(,xb ,xt) `(,ht 0)
+                                :color :gray50
+                                :thick 2
+                                :alpha 0.5)
+                      (plt:draw-text 'canon (short-format-ra α)
+                                     `((:data ,xb) (:frac 0.02))
+                                     :align :ctr
+                                     :color :yellow
+                                     :alpha 0.5)))
             (loop for δ from δ-lo below δ-hi by 1/12 do
                     (let ((y  (dec-to-y δ)))
-                      (when (< 0 y ht)
-                        (plt:plot 'canon `(0 ,wd) `(,y ,y)
-                                  :color :gray50
-                                  :alpha 0.5))))
+                      (plt:plot 'canon `(0 ,wd) `(,y ,y)
+                                :color :gray50
+                                :alpha 0.5)))
             (loop for δ from δ-lo below δ-hi by 1/4 do
                     (let ((y  (dec-to-y δ)))
-                      (when (< 0 y ht)
-                        (plt:plot 'canon `(0 ,wd) `(,y ,y)
-                                  :thick 2
-                                  :color :gray50
-                                  :alpha 0.5)
-                        (plt:draw-text 'canon (short-format-dec δ)
-                                       `((:frac 0.98) (:data ,y))
-                                       :align :ne
-                                       :color :yellow
-                                       :alpha 0.5))))
+                      (plt:plot 'canon `(0 ,wd) `(,y ,y)
+                                :thick 2
+                                :color :gray50
+                                :alpha 0.5)
+                      (plt:draw-text 'canon (short-format-dec δ)
+                                     `((:frac 0.98) (:data ,y))
+                                     :align :ne
+                                     :color :yellow
+                                     :alpha 0.5)))
             ))))))
     
 #|
@@ -507,9 +503,9 @@ https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/345/gaia2&-c=240.005064%
          (xpxsiz (nquery-header hdr "XPIXSZ"))
          (ypxsiz (nquery-header hdr "YPIXSZ"))
          (foclen (nquery-header hdr "FOCALLEN"))
-         (radius (* 1.1
+         (radius (* 1.5
                     (rtod
-                     (atan (/ (max (* nxpix xpxsiz) (* nypix ypxsiz))
+                     (atan (/ (abs (complex (* nxpix xpxsiz) (* nypix ypxsiz)))
                               foclen 2000)))
                     ))
          (cmdstr (format nil
@@ -552,11 +548,14 @@ cr_ra cr_dec radius)))
           (let ((hdr1  str)
                 (hdr2  (cadr cat)))
             (um:nlet inner ((cat (nthcdr 3 cat))
+                            (ctr 0)
                             (ans nil))
               (if (endp cat)
-                  (setf (img-ncat img) (stable-sort
-                                        (sort ans #'< :key #'cadr)
-                                        #'< :key #'car))
+                  (progn
+                    (format t "~%~D stars in catalog" ctr)
+                    (setf (img-ncat img) (stable-sort
+                                          (sort ans #'< :key #'cadr)
+                                          #'< :key #'car)))
                 (let+ ((str   (car cat)))
                   (cond ((plusp (length str))
                          (let+ ((strs  (um:split-string str :delims '(#\|)))
@@ -564,10 +563,10 @@ cr_ra cr_dec radius)))
                                 (ra  (read-from-string rastr))
                                 (dec (read-from-string decstr))
                                 (gmag (read-from-string gmagstr)))
-                           (go-inner (cdr cat) (cons `(,ra ,dec ,gmag) ans))
+                           (go-inner (cdr cat) (1+ ctr) (cons `(,ra ,dec ,gmag) ans))
                            ))
                         (t
-                         (go-inner (cdr cat) ans))
+                         (go-inner (cdr cat) ctr ans))
                         ))))
             ))))))
                          
@@ -614,17 +613,22 @@ cr_ra cr_dec radius)))
 
 
 (defun find-stars-in-cat (img)
-  (dolist (star (img-stars img))
-    (let ((ans (find-star-in-cat img star)))
-      (if ans
-          (let+ (( (_ dra ddec _ _ cmag) ans))
-            (setf (star-catv star) cmag
-                  (star-dx star) dra
-                  (star-dy star) ddec))
-        (setf (star-catv star) nil
-              (star-dx star) nil
-              (star-dy star) nil))
-      )))
+  (let ((found nil))
+    (dolist (star (img-stars img))
+      (let ((ans (find-star-in-cat img star)))
+        (if ans
+            (let+ (( (_ dra ddec _ _ cmag) ans))
+              (push star found)
+              (setf (star-catv star) cmag
+                    (star-dx star) dra
+                    (star-dy star) ddec))
+          (setf (star-catv star) nil
+                (star-dx star) nil
+                (star-dy star) nil))
+        ))
+    (format t "~%~D stars found in catalog" (length found))
+    (hilight-stars 'stars found :yellow)
+    ))
                     
 #|
 (get-star-positions *saved-img*)
