@@ -109,3 +109,10 @@ See also these pages:
 
 ![M5](https://github.com/dbmcclain/AperturePhotometry/assets/3160577/cf2d3896-586a-4db7-ae8c-a5a2a2ef357d)
 
+Update 24-06-24
+---
+Added new Canonical Display of starfield, rotated so that N is up and E is to left. 
+
+<img width="1370" alt="New Canonical Display" src="https://github.com/dbmcclain/AperturePhotometry/assets/3160577/8e129950-99ca-450b-8b06-26a482f78d94">
+
+
