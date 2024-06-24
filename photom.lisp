@@ -994,7 +994,8 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
               :ytitle "Cat GMag [mag]")
     (plt:plot 'zp flux cmags
               :symbol :dot
-              :alpha 0.5)
+              ;; :alpha 0.5
+              )
     (plt:draw-text 'zp
                    (format nil "Mag Offs = ~5,2F" y0)
                    '((:frac 0.1) (:frac 0.85)))
