@@ -119,7 +119,7 @@ The photometry system is now adapted to arbitrary image sizes. The Vespara II ca
 
 The Vespara II also does not provide a FITS stacked image - we have to stack the individual FITS frames ourself, or use the stacked TIFF image that it does provide. And neither the individual FITS frames, nor the TIFF stack, carry a plate solution. PixInsight can do the image stacking and the plate solution, no problem. But it doesn't propagate enough of the plate solution to a saved FITS image for the information to be useful to anyone else. So we have to resort to Astrometry.net to get a proper plate solution. Save the NewImage.fits from Astrometry.net, and use that image for photometric reductions.
 
-But... that image (2160 x 3840) is too large to hand off to the FFT2D function. So we detect that problem, if it occurs, and resort to doing the 2D FFT ourselves, row by row, column by column. But to speed it up, we parallelize this process in both dimensions, farming out quarter-slices of the image to the worker pool.
+But... that image (2160 x 3840) is too large to hand off to the FFT2D function. So we detect that problem, if it occurs, and resort to doing the 2D FFT ourselves, row by row, column by column. And to speed it up, we parallelize this process in both dimensions, farming out quarter-slices of the image to the worker pool.
 
 <img width="1370" alt="New Canonical Display" src="https://github.com/dbmcclain/AperturePhotometry/assets/3160577/8e129950-99ca-450b-8b06-26a482f78d94">
 
