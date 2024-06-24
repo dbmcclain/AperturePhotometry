@@ -539,11 +539,12 @@
          (htx       (um:ceiling-pwr2 ht))
          (img-proc  (create
                      (lambda (cust)
-                       (send cust (or fimg
-                                      (let+ ((wrk-arr  (make-image-array htx wdx :initial-element 0f0)))
-                                        (implant-subarray wrk-arr arr 0 0)
-                                        (fft2d:fwd wrk-arr))
-                                      )))
+                       (send cust
+                             (or fimg
+                                 (let+ ((wrk-arr  (make-image-array htx wdx :initial-element 0f0)))
+                                   (implant-subarray wrk-arr arr 0 0)
+                                   (fft2d:fwd wrk-arr))
+                                 )))
                      ))
          (krnl-proc (create
                      (lambda (cust)
