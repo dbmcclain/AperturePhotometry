@@ -111,7 +111,9 @@ See also these pages:
 
 Update 24-06-24
 ---
-Added new Canonical Display of starfield, rotated so that N is up and E is to left. Makes it much simpler to compare with star charts and online published data. Frames are self-calibrating by way of looking up stars in the Gaia DR2 catalog, and matching against our found stars. An SNRdB weighted mean gives the magnitude offset to be used for the image. Just mouse around and see the estimated measured magnitudes.
+Added new Canonical Display of starfield, rotated so that N is up and E is to left. Makes it much simpler to compare with star charts and online published data. 
+
+Frames are self-calibrating by way of looking up stars in the Gaia DR2 catalog, and matching against our found stars. An SNRdB weighted mean gives the magnitude offset to be used for the image, and the accuracy to be expected. Just mouse around and see the estimated measured magnitudes. Right-click anywhere and see the measurement details.
 
 <img width="1370" alt="New Canonical Display" src="https://github.com/dbmcclain/AperturePhotometry/assets/3160577/8e129950-99ca-450b-8b06-26a482f78d94">
 
