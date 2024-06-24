@@ -72,23 +72,38 @@
 ;; --------------------------------------------
 
 (defstruct img
-  arr med mad hdr
-  thr stars
-  (mag-off   *mag-offset*)
-  (core      *core-radius*)
-  (fake-star *fake-star*)
-  gain
-  s0sq
-  himg
-  cat
-  ncat
-  canon)
+  arr              ;; Image array (ADU)
+  med mad          ;; Median and MAD of image
+  hdr              ;; FITS header of image
+  thr              ;; Detection threshold used (σ-units)
+  stars            ;; List of detected stars
+  (mag-off   *mag-offset*)  ;; Mag offset to add to engineering magnitudes
+  (core      *core-radius*) ;; Radius of photometry aperture core
+  (fake-star *fake-star*)   ;; PSF Kernel + Info
+  gain             ;; Sensor gain used for image
+  s0sq             ;; Estimated noise floor of image
+  himg             ;; The cross-correlation image
+  cat              ;; Text Catalog from Vizier Gaia DR2
+  ncat             ;; Fast lookup table for catalog
+  canon)           ;; Holds canonical view rotation info
 
 (defstruct star
-  x y pk mag snr flux sd ra dec catv dx dy)
+  x y              ;; X, Y position in image
+  pk mag snr       ;; Peak ADU, Magnitude and dBSNR measured
+  flux sd          ;; Flux estimate over PSF, standard dev estimate (incl star Poisson noise)
+  ra dec           ;; Computed RA, Dec based on plate solution
+  catv             ;; Gaia DR2 Gmag when available
+  dx dy)           ;; dX, dY of our position from predicted catalog position in image
 
 (defstruct fake
-  krnl Δ npix ksum k2sum radius sigma box)
+  krnl             ;; PSF kernel array
+  Δ                ;; Determinant of fit
+  npix             ;; Nbr pixels in PSF
+  ksum             ;; Sum of kernel pixels
+  k2sum            ;; Sum of squared kernel pixels
+  radius           ;; Radius of PSF
+  sigma            ;; X-sigma, Y-sigma, Rotation angle (radians)
+  box)             ;; Box of kernal array
 
 
 (defun do-with-img (img fn)
