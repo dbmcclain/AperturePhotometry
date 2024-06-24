@@ -350,7 +350,7 @@
 (defun rtod (x)
   (* x (/ 45f0 (atan 1f0))))
 
-(defun acceptable-training-star-p (img star)
+(defun acceptable-training-star-p (star)
   ;; Improvements will be based on stars
   ;; with flux: 4000 < adu < 32758
   (let ((z  (star-pk star)))
@@ -359,8 +359,16 @@
     ))
 
 (defun improve-sigma (img &key fit-args (radius 7))
-  (let+ ((stars   (remove-if (um:curry #'acceptable-training-star-p img)
-                             (img-stars img))))
+  (let+ ((stars   (um:take 100
+                           (sort 
+                            (remove-if #'acceptable-training-star-p
+                                       (img-stars img))
+                            #'>
+                            :key #'star-snr)))
+         (nstars  (length stars))
+         (stars   (if (> nstars 50)
+                      (um:drop (- nstars 50) stars)
+                    stars)))
     (format t "~%~D stars selected to guide improvement" (length stars))
     (labels ((quality-sum (vec)
                (let+ ((prof  (make-gaussian-elliptical-fake-star
@@ -544,6 +552,58 @@
 (defun conj* (z1 z2)
   (* (conjugate z1) z2))
 
+(defun flexible-fft2d (arr dir)
+  (handler-case
+      (case dir
+        (:fwd (fft2d:fwd arr))
+        (t    (fft2d:inv arr)))
+    (error () ;; image probably too large to handle in one go...
+      (labels ((fft (vec dest dir)
+                 (case dir
+                   (:fwd  (fft:fwd vec :dest dest))
+                   (t     (fft:inv vec :dest dest))))
+               (make-row-farmer (dst start end dir)
+                 (create
+                  (lambda (cust)
+                    (loop for row from start below end do
+                            (let ((rdst (array-row dst row))
+                                  (rsrc (array-row arr row)))
+                              (fft rsrc rdst dir)
+                              ))
+                    (send cust))))
+               (make-col-farmer (src dst start end dir)
+                 (create
+                  (lambda (cust)
+                    (let+ ((nrows (array-dimension src 0)))
+                      (loop for col from start below end do
+                              (let+ ((csrc (array-col src col))
+                                     (ans  (fft csrc nil dir)))
+                                (loop for row from 0 below nrows do
+                                        (setf (aref dst row col) (aref ans row)))
+                                )))
+                    (send cust))
+                  )))
+        (let+ (((nrows ncols) (array-dimensions arr))
+               (dst           (make-array (array-dimensions arr)
+                                          :element-type '(complex single-float)))
+               (nrows/4       (truncate nrows 4))
+               (row-farmers   (loop for start from 0 below nrows by nrows/4
+                                    for end from nrows/4 by nrows/4
+                                    collect
+                                    (make-row-farmer dst start (min end nrows) dir)
+                                    ))
+               (_  (ask (apply #'fork row-farmers)))
+               (ncols/4       (truncate ncols 4))
+               (col-farmers   (loop for start from 0 below ncols by ncols/4
+                                    for end from ncols/4 by nrows/4
+                                    collect
+                                    (make-col-farmer dst dst start (min end ncols) dir)
+                                    ))
+               (_ (ask (apply #'fork col-farmers))))
+          dst
+          )))
+    ))
+
 (defun make-himg (img fimg)
   ;; Cross-correlate the image array with a Gaussian kernel.
   ;; Return the correlation image.
@@ -572,7 +632,7 @@
                              (or fimg
                                  (let+ ((wrk-arr  (make-image-array htx wdx :initial-element 0f0)))
                                    (implant-subarray wrk-arr arr 0 0)
-                                   (fft2d:fwd wrk-arr))
+                                   (flexible-fft2d wrk-arr :fwd))
                                  )))
                      ))
          (krnl-proc (create
@@ -587,13 +647,13 @@
                               (kwrk-arr  (make-image-array htx wdx :initial-element 0f0)))
                          (map-array-into krnl (um:rcurry #'/ norm) krnl)
                          (implant-subarray kwrk-arr krnl 0 0)
-                         (send cust (fft2d:fwd (vm:shift kwrk-arr `(,(- kradius) ,(- kradius)))))
+                         (send cust (flexible-fft2d (vm:shift kwrk-arr `(,(- kradius) ,(- kradius))) :fwd))
                          ))))
          (:mvb (fimg fkrnl) (ask (fork img-proc krnl-proc)))
          ;; Construct the G' matrix
          ;; FT of a correlation is the conj prod of their FT's
          (ffilt (map-array #'conj* fkrnl fimg))
-         (chimg (fft2d:inv ffilt))
+         (chimg (flexible-fft2d ffilt :inv))
          (harr  (make-image-array ht wd)))
     (map-array-into harr #'realpart (extract-subarray chimg box))
     (let* ((med  (vm:median harr))
@@ -897,7 +957,7 @@
 
 (defun improve-stars (img thresh stars0 fimg)
   ;; Using initial find, try to improve the Gaussian core model and redo
-  (let ((acceptable (count-if (um:curry #'acceptable-training-star-p img) stars0)))
+  (let ((acceptable (count-if #'acceptable-training-star-p stars0)))
     (cond ((>= acceptable 5)
            ;; Don't bother doing this unless at least 5 stars to base on
            (format t "~%~D initial stars" (length stars0))

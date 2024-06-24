@@ -233,7 +233,13 @@ https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/345/gaia2&-c=240.005064%
 ;; ---------------------------------------------------
 
 (defun bare-canon-view (img)
-  (let+ ((th    (+ 180 (parallactic-angle img)))
+  (let+ ((th    (parallactic-angle img))
+         (hdr   (img-hdr img))
+         (instr (query-header hdr "INSTRUME"))
+         (th    (if (search "Seestar" instr
+                            :test #'equalp)
+                    (+ th 180)
+                  th))
          (cisth (cis (dtor th)))
          (xf1_1 (realpart cisth))
          (xf1_2 (imagpart cisth)))
@@ -326,10 +332,11 @@ https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/345/gaia2&-c=240.005064%
                (:mvb (α0t _ ) (pix-to-radec wd 0))
                (:mvb (α0b δ0) (pix-to-radec wd ht))
                (:mvb (α1b _)  (pix-to-radec 0 ht))
-               (α-lo (floor (min α0b α0t)))
-               (α-hi (ceiling (max α1b α1t)))
+               (α-lo (floor (min α0b α0t α1b α1t)))
+               (α-hi (ceiling (max α0b α0t α1b α1t)))
                (δ-lo (floor δ0))
                (δ-hi (ceiling δ1)))
+          (print (list δ-lo δ-hi))
           ;; Uniform grid assumes that plate distortions are visually
           ;; imperceptible.  Also, RA & Dec "lines", instead of
           ;; projected arcs with curvature is correct only to first
