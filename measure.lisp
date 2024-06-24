@@ -460,6 +460,7 @@
 |#
 
 ;; --------------------------------------------------------------------------
+;; Parallelized Star Finding
 
 (defun find-stars (ref-img &key (thresh 5) fimg)
   ;; thresh in sigma units
@@ -473,36 +474,55 @@
          (ring-radius (fake-radius krnl))
          (margin      (1+ ring-radius))
          (srch-box    (inset-box (make-box-of-array harr) margin margin))
-         (srch-arr    (make-masked-array harr srch-box)))
+         ((lf tp rt bt) srch-box)
+         (midx        (truncate (+ lf rt) 2))
+         (midy        (truncate (+ tp bt) 2))
+         (srch-arr    (make-masked-array harr srch-box))
+         (srchr       (lambda (srch-box)
+                        (create
+                         (lambda (cust)
+                           (send cust
+                                 (loop for mult in '(200 100 50 25 12 6 1)
+                                       for mult-thr = (* mult thr)
+                                       nconc
+                                         (loop for y from (box-top srch-box) below (box-bottom srch-box)
+                                               nconc
+                                                 (loop for x from (box-left srch-box) below (box-right srch-box)
+                                                       nconc
+                                                         (when (>= (bref srch-arr y x) mult-thr)
+                                                           (let+ ((:mvb (yc xc pk)   (locate-peak srch-arr y x)))
+                                                             (when (box-contains-pt-p srch-box xc yc)
+                                                               (let+ ((gain   (img-gain ref-img)) ;; e-/ADU
+                                                                      (ampl   (* gain (aref harr yc xc)))
+                                                                      (tnoise (sqrt (+ ampl (* gain gain s0sq))))
+                                                                      (snr    (/ ampl tnoise)))
+                                                                 (when (>= snr nsigma)
+                                                                   ;; everything passed, so clear the
+                                                                   ;; mask so that we won't find this
+                                                                   ;; one again.
+                                                                   (zap-peak srch-arr yc xc thr)
+                                                                   (let+ ((:mvb (xcent ycent) (centroid himg xc yc)))
+                                                                     `(,(make-star
+                                                                         :x    xcent
+                                                                         :y    ycent
+                                                                         :pk   pk
+                                                                         :mag  (magn ref-img ampl)
+                                                                         :snr  (db10 snr)
+                                                                         :flux ampl
+                                                                         :sd   tnoise))
+                                                                     ))))))
+                                                       )))))
+                         )))
+         ;; Search 4 quadrants in parallel
+         (srch1       (funcall srchr (make-box lf tp midx midy)))
+         (srch2       (funcall srchr (make-box midx tp rt midy)))
+         (srch3       (funcall srchr (make-box lf midy midx bt)))
+         (srch4       (funcall srchr (make-box midx midy rt bt)))
+         (:mvb (stars1 stars2 stars3 stars4) (ask (fork srch1 srch2 srch3 srch4))))
     (values
-     (loop for mult in '(200 100 50 25 12 6 1)
-           for mult-thr = (* mult thr)
-           nconc
-             (loop for y from (box-top srch-box) below (box-bottom srch-box) nconc
-                     (loop for x from (box-left srch-box) below (box-right srch-box) nconc
-                             (when (>= (bref srch-arr y x) mult-thr)
-                               (let+ ((:mvb (yc xc pk)   (locate-peak srch-arr y x))
-                                      (gain   (img-gain ref-img)) ;; e-/ADU
-                                      (ampl   (* gain (aref harr yc xc)))
-                                      (tnoise (sqrt (+ ampl (* gain gain s0sq))))
-                                      (snr    (/ ampl tnoise)))
-                                 (when (>= snr nsigma)
-                                   ;; everything passed, so clear the
-                                   ;; mask so that we won't find this
-                                   ;; one again.
-                                   (zap-peak srch-arr yc xc thr)
-                                   (let+ ((:mvb (xcent ycent) (centroid himg xc yc)))
-                                     `(,(make-star
-                                         :x    xcent
-                                         :y    ycent
-                                         :pk   pk
-                                         :mag  (magn ref-img ampl)
-                                         :snr  (db10 snr)
-                                         :flux ampl
-                                         :sd   tnoise))
-                                     ))))
-                           )))
-     fimg)))
+     (concatenate 'list stars1 stars2 stars3 stars4)
+     fimg)
+    ))
 
 (defun centroid (img xc yc)
   (let+ ((arr   (img-arr img))
@@ -758,33 +778,32 @@
     ))
 
 (defun show-crosscuts (img star)
-  (let+ ((x    (round (star-x star)))
-         (y    (round (star-y star)))
-         (arr  (img-arr img)))
-    (when (array-in-bounds-p arr y x)
-      (let+ ((arr  (extract-subarray (img-arr img) (make-box-of-radius (round x) (round y) 20)))
-             (xs   (vm:bipolar-framp 41))
-             (hs   (array-row arr 20))
-             (vs   (array-col arr 20))
-             (lo   (* 10 (1- (floor (min (reduce #'min hs) (reduce #'min vs)) 10))))
-             (hi   (* 10 (1+ (ceiling (max (reduce #'max hs) (reduce #'max vs)) 10)))))
-        (plt:plot 'crosscuts xs hs
-                  :clear t
-                  :title  "Image Cross Cuts"
-                  :xtitle "Pixel Position"
-                  :ytitle "Image Amplitude [du]"
-                  :thick  2
-                  :line-type :histo
-                  :yrange `(,lo ,hi)
-                  :alpha 0.5
-                  :legend "X")
-        (plt:plot 'crosscuts xs vs
-                  :thick 2
-                  :color :red
-                  :alpha 0.5
-                  :line-type :histo
-                  :legend "Y")
-        ))))
+  (ignore-errors
+    (let+ ((x    (round (star-x star)))
+           (y    (round (star-y star)))
+           (arr  (extract-subarray (img-arr img) (make-box-of-radius (round x) (round y) 20)))
+           (xs   (vm:bipolar-framp 41))
+           (hs   (array-row arr 20))
+           (vs   (array-col arr 20))
+           (lo   (* 10 (1- (floor (min (reduce #'min hs) (reduce #'min vs)) 10))))
+           (hi   (* 10 (1+ (ceiling (max (reduce #'max hs) (reduce #'max vs)) 10)))))
+      (plt:plot 'crosscuts xs hs
+                :clear t
+                :title  "Image Cross Cuts"
+                :xtitle "Pixel Position"
+                :ytitle "Image Amplitude [du]"
+                :thick  2
+                :line-type :histo
+                :yrange `(,lo ,hi)
+                :alpha 0.5
+                :legend "X")
+      (plt:plot 'crosscuts xs vs
+                :thick 2
+                :color :red
+                :alpha 0.5
+                :line-type :histo
+                :legend "Y")
+      )))
 
 (defun star-explain (img)
   ;; mouse left-click on star or region puts up a popup containing all the details...
@@ -794,24 +813,23 @@
     (let* ((ans nil)
            (txt (with-output-to-string (s)
                   (let ((*standard-output* s))
-                    (setf ans (measure-location img (round xc) (round yc)))))
+                    (ignore-errors
+                      (setf ans (measure-location img (round xc) (round yc))))))
                 ))
       (case gspec
         (:SHIFT
-         (when (star-p ans)
+         (when ans
            (mp:funcall-async #'recal img ans)))
         (t
          (let+ ((ximg (copy-img img))
                 (:mvb (xx yy arr) (canon-xform ximg xc yc))
-                (star (if (star-p ans)
-                          ans
-                        (make-star
-                         :x  xx
-                         :y  yy
-                         ))))
-           (when (array-in-bounds-p arr yy xx)
-             (setf (img-arr ximg) arr)
-             (mp:funcall-async #'show-crosscuts ximg star)))))
+                (star (or ans
+                          (make-star
+                           :x  xx
+                           :y  yy
+                           ))))
+           (setf (img-arr ximg) arr)
+           (mp:funcall-async #'show-crosscuts ximg star))))
       txt  ;; needs to return the text to display in a popup
       )))
 
