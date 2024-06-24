@@ -86,16 +86,25 @@
               (format t "~%Peak value ~7,1F (raw ~D)" ampl (round pk))
               (format t "~%Thresh     ~7,1F" thresh)
               (if (>= snr nsigma)
-                  (print (make-star
-                          :x    xcent
-                          :y    ycent
-                          :pk   pk
-                          :ra   α
-                          :dec  δ
-                          :mag  (magn img ampl)
-                          :snr  (db10 snr)
-                          :flux ampl
-                          :sd   tnoise))
+                  (let+ ((star (make-star
+                                :x    xcent
+                                :y    ycent
+                                :pk   pk
+                                :ra   α
+                                :dec  δ
+                                :mag  (magn img ampl)
+                                :snr  (db10 snr)
+                                :flux ampl
+                                :sd   tnoise))
+                         (info  (when (img-ncat img)
+                                  (find-star-in-cat img star))))
+                    (when info
+                      (let+ (( (_ dra ddec _ _ cmag) info))
+                        (setf (star-catv star) cmag
+                              (star-dx star) dra
+                              (star-dy star) ddec)
+                        ))
+                    (print star))
                 (format t "~%Failed: Sum below threshold:~%   Mag ≈ ~4,1F  SNR ≈ ~3,1F"
                         (magn img ampl) snr)))
           (format t "~%Failed: Fitted amplitude not positive,~%   central peak ≈ ~4,1F mag"
