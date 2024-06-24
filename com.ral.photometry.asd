@@ -18,5 +18,8 @@
   :serial       t
   :depends-on   ("com.ral.useful-macros"
                  "com.ral.csv"
+                 "com.ral.actors"
+                 "com.ral.vmath"
+                 "plotter"
                  ))
 
