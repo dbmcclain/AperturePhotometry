@@ -588,16 +588,14 @@
                                           :element-type '(complex single-float)))
                (nrows/4       (truncate nrows 4))
                (row-farmers   (loop for start from 0 below nrows by nrows/4
-                                    for end from nrows/4 by nrows/4
                                     collect
-                                    (make-row-farmer dst start (min end nrows) dir)
+                                    (make-row-farmer dst start (min (+ start nrows/4) nrows) dir)
                                     ))
                (_  (ask (apply #'fork row-farmers)))
                (ncols/4       (truncate ncols 4))
                (col-farmers   (loop for start from 0 below ncols by ncols/4
-                                    for end from ncols/4 by nrows/4
                                     collect
-                                    (make-col-farmer dst dst start (min end ncols) dir)
+                                    (make-col-farmer dst dst start (min (+ start ncols/4) ncols) dir)
                                     ))
                (_ (ask (apply #'fork col-farmers))))
           dst
@@ -905,7 +903,7 @@
          (hi     (+ med (* 15 mad)))
          (arr    (img-arr img))
          ( (ht wd) (array-dimensions arr))
-         (sf     (/ 1000 (max wd ht)))
+         (sf     (/ 1250 (max wd ht)))
          (xsize  (round (* wd sf)))
          (ysize  (round (* ht sf))))
     (print `(:scale ,sf))

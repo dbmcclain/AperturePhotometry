@@ -402,11 +402,13 @@ https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/345/gaia2&-c=240.005064%
            ((ht wd) (array-dimensions arr))
            (info    (img-canon img)))
       (plt:draw-text 'canon "N"
-                     `((:data ,(round wd 2)) (:data ,(- ht 20)))
+                     `((:data ,(round wd 2)) (:data ,(- ht 30)))
                      :font-size 16
+                     :align :n
                      :color :yellow)
       (plt:draw-text 'canon "E"
-                     `((:data 5) (:data ,(round ht 2)))
+                     `((:data 20) (:data ,(round ht 2)))
+                     :align :w
                      :font-size 16
                      :color :yellow)
       (labels ((pix-to-radec (x y)
@@ -476,6 +478,8 @@ https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/345/gaia2&-c=240.005064%
 (setf *saved-cimg*
       (canon-view *saved-img*))
 (show-img 'img *saved-img*)
+(show-img 'canon *saved-cimg*)
+(annotate-cimg *saved-cimg*)
  |#
 
 
