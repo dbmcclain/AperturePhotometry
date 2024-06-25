@@ -192,3 +192,16 @@
 (defun k/array (arr kval)
   (array-unop arr (um:curry #'/ kval)))
 
+;; --------------------------------------------
+
+(defun array-rows-reverse (arr)
+  (let+ ((nrows   (array-dimension arr 0))
+         (dst     (make-array (array-dimensions arr)
+                              :element-type (array-element-type arr))))
+    (loop for row from 0 below nrows do
+          (let+ ((vsrc (array-row arr row))
+                 (vdst (array-row dst (1- (- nrows row)))))
+            (replace vdst vsrc)
+            ))
+    dst))
+         

@@ -174,8 +174,17 @@ https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/345/gaia2&-c=240.005064%
          (cd1_1  (nquery-header hdr "CD1_1"))
          (cd1_2  (nquery-header hdr "CD1_2"))
          (cd2_1  (nquery-header hdr "CD2_1"))
-         (cd2_2  (nquery-header hdr "CD2_2")))
-    (rtod (atan cd1_2 cd1_1))
+         (cd2_2  (nquery-header hdr "CD2_2"))
+
+         (xf11   (/ (+ cd1_1 cd2_2) 2))
+         (xf12   (/ (- cd1_2 cd2_1) 2))
+         (norm   (abs (complex xf11 xf12)))
+         (xf11   (/ xf11 norm))
+         (xf12   (/ xf12 norm)))
+    (values
+     (rtod (atan xf12 xf11))
+     cd1_1 cd1_2 cd2_1 cd2_2
+     xf11 xf12)
     ))
 
 #|
@@ -188,113 +197,188 @@ https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/345/gaia2&-c=240.005064%
 
 (defstruct rotxform
   theta   ;; parallactic angle + 180 deg
+  flip    ;; t if needs RA flip
   xf1_1   ;; Cos theta
   xf1_2   ;; Sin theta
   xc      ;; (xc, yc) center of untilted image
   yc
-  cxc     ;; (cxc, cyx) center of tilted (canonical) image
-  cyc
+  cxc cyc
   arr)    ;; original img array of untilted img
 
 (defun rotxform (xform x y)
   ;; Transform from untilted image to tilted
   (with-accessors ((xf1_1   rotxform-xf1_1)
                    (xf1_2   rotxform-xf1_2)
+                   (flip    rotxform-flip)
                    (xc      rotxform-xc)
                    (yc      rotxform-yc)
                    (cxc     rotxform-cxc)
                    (cyc     rotxform-cyc)) xform
-    (let+ ((xmc  (- x xc))
-           (ymc  (- y yc))
-           (cxmc (+ (* xmc xf1_1) (* ymc xf1_2)))
-           (cymc (- (* ymc xf1_1) (* xmc xf1_2))))
+    (let+ ((xu   (- x xc))
+           (yu   (- y yc))
+           (xw   (- (* xf1_1 xu) (* xf1_2 yu)))
+           (yw   (+ (* xf1_1 yu) (* xf1_2 xu))))
       (values
-       (+ cxmc cxc)
-       (+ cymc cyc))
+       (if flip (- cxc xw) (+ cxc xw))
+       (+ cyc yw))
       )))
 
 (defun inv-rotxform (xform x y)
   ;; Transform from tilted image to untilted
   (with-accessors ((xf1_1   rotxform-xf1_1)
                    (xf1_2   rotxform-xf1_2)
+                   (flip    rotxform-flip)
                    (xc      rotxform-xc)
                    (yc      rotxform-yc)
                    (cxc     rotxform-cxc)
                    (cyc     rotxform-cyc)) xform
-    (let+ ((cxmc  (- x cxc))
-           (cymc  (- y cyc))
-           (xmc   (- (* cxmc xf1_1) (* cymc xf1_2)))
-           (ymc   (+ (* cymc xf1_1) (* cxmc xf1_2))))
+    (let+ ((xu    (if flip (- cxc x) (- x cxc)))
+           (yu    (- y cyc)))
       (values
-       (+ xmc xc)
-       (+ ymc yc))
+       (+ xc (+ (* xf1_1 xu) (* xf1_2 yu)))
+       (+ yc (- (* xf1_1 yu) (* xf1_2 xu))))
       )))
 
 ;; ---------------------------------------------------
 
-(defun bare-canon-view (img)
-  (let+ ((th    (parallactic-angle img))
-         (hdr   (img-hdr img))
-         (instr (query-header hdr "INSTRUME"))
-         (th    (if (search "Seestar" instr
-                            :test #'equalp)
-                    (+ th 180)
-                  th))
-         (cisth (cis (dtor th)))
-         (xf1_1 (realpart cisth))
-         (xf1_2 (imagpart cisth)))
-    (labels (#||#
-             (proj (x y)
-               (values
-                (+ (* x xf1_1) (* y xf1_2))
-                (- (* y xf1_1) (* x xf1_2))))
-             (inv-proj (x y)
-               (values
-                (- (* x xf1_1) (* y xf1_2))
-                (+ (* x xf1_2) (* y xf1_1)))))
-      (let+ ((arr (img-arr img))
-             ((ht wd) (array-dimensions arr))
-             (:mvb (xtl ytl) (proj 0  0))
-             (:mvb (xtr ytr) (proj wd 0))
-             (:mvb (xbr ybr) (proj wd ht))
-             (:mvb (xbl ybl) (proj 0  ht))
-             (lf   (min xtl xbl xtr xbr))
-             (rt   (max xtr xbr xtl xbl))
-             (tp   (min ytl ytr ybl ybr))
-             (bt   (max ybl ybr ytl ytr))
-             (xc   (/ wd 2))
-             (yc   (/ ht 2))
-             (cwd  (ceiling (- rt lf)))
-             (cht  (ceiling (- bt tp)))
-             (cxc  (/ cwd 2))
-             (cyc  (/ cht 2))
-             (carr (make-image-array cht cwd :initial-element 0f0))
-             (cimg (copy-img img)))
-        (setf (img-arr cimg) carr
-              (img-canon cimg) (make-rotxform
-                                :arr   arr
-                                :theta th
-                                :xf1_1 xf1_1
-                                :xf1_2 xf1_2
-                                :xc    xc
-                                :yc    yc
-                                :cxc   cxc
-                                :cyc   cyc))
-        (loop for row from 0 below cht do
-                (loop for col from 0 below cwd do
-                        (let+ ((:mvb (sx sy) (inv-proj (- col cxc) (- row cyc)))
-                               (srow (round (+ sy yc)))
-                               (scol (round (+ sx xc))))
-                          (when (array-in-bounds-p arr srow scol)
-                            (setf (aref carr row col) (aref arr srow scol)))
-                          )))
-        (show-img 'canon cimg)
-        cimg
+#|
+(parallactic-angle *saved-img*)
+(defvar *saved=cimg*)
+(setf *saved-cimg*
+      (canon-view *saved-img*))
+(show-img 'img *saved-img*)
+
+(let+ ((xform (img-canon *saved-cimg*)))
+  (roots:find-root (um:curry #'score-angle *saved-img* xform) 180))
+ |#
+
+(defun find-angle (img &optional init-xform)
+  ;; Answer the question: By what angle must we rotate the FITS image,
+  ;; so that a horizontal line through the middle of the rotated image
+  ;; has constant Declination, and so that Declinations increase from
+  ;; bottom to top, and RA increases from right to left?
+  (let+ ((arr     (img-arr img))
+         ((ht wd) (array-dimensions arr))
+         (xc      (/ wd 2))
+         (yc      (/ ht 2))
+         (xform   (or init-xform
+                      (make-rotxform
+                       :arr    arr
+                       :flip   nil
+                       :theta  0
+                       :xf1_1  0
+                       :xf1_2  0
+                       :xc     xc
+                       :yc     yc
+                       :cxc    0
+                       :cyc    0))))
+    (labels ((set-xform-angle (ang)
+               (let+ ((cis  (cis (dtor ang)))
+                      (c    (realpart cis))
+                      (s    (imagpart cis)))
+                 (setf (rotxform-theta xform) ang
+                       (rotxform-xf1_1 xform) c
+                       (rotxform-xf1_2 xform) s)
+                 ))
+             (score (ang)
+               (set-xform-angle ang)
+               (let+ ((xc   (rotxform-cxc xform))
+                      (yc   (rotxform-cyc xform))
+                      (:mvb (x0 y0) (inv-rotxform xform (- xc 1000) yc))
+                      (:mvb (x1 y1) (inv-rotxform xform (+ xc 1000) yc))
+                      (:mvb (_ δ0)  (to-radec img x0 y0))
+                      (:mvb (_ δ1)  (to-radec img x1 y1)))
+                 (- δ1 δ0)
+                 ))
+             (update-image-center ()
+               (let+ ((:mvb    (xbl ybl) (rotxform xform  0  0))
+                      (:mvb    (xbr ybr) (rotxform xform wd  0))
+                      (:mvb    (xtl ytl) (rotxform xform  0 ht))
+                      (:mvb    (xtr ytr) (rotxform xform wd ht))
+                      (lf      (floor (min xbl xbr xtl xtr)))
+                      (rt      (ceiling (max xbl xbr xtl xtr)))
+                      (bt      (floor (min ybl ybr ytl ytr)))
+                      (tp      (ceiling (max ybl ybr ytl ytr)))
+                      (cwd     (- rt lf))
+                      (cht     (- tp bt))
+                      (cxc     (/ cwd 2))
+                      (cyc     (/ cht 2)))
+                 (setf (rotxform-cxc xform) cxc
+                       (rotxform-cyc xform) cyc))
+               ))
+      (let+ ((start  (rotxform-theta xform))
+             (ang    (roots:find-root #'score start)))
+        (set-xform-angle ang)
+        (unless init-xform
+             (let+ ((:mvb (x0 y0)    (inv-rotxform xform 0 0))
+                    (:mvb (x1 y1)    (inv-rotxform xform 0 ht))
+                    (:mvb (ra0 dec0) (to-radec img x0 y0))
+                    (:mvb (ra1 dec1) (to-radec img x1 y1)))
+               (when (< dec1 dec0)
+                 (incf ang 180)
+                 (set-xform-angle ang)))
+                    
+             (let+ ((:mvb (x0 y0)    (inv-rotxform xform 0 0))
+                    (:mvb (x1 y1)    (inv-rotxform xform 0 ht))
+                    (:mvb (ra0 dec0) (to-radec img x0 y0))
+                    (:mvb (ra1 dec1) (to-radec img x1 y1))
+                    (:mvb (x2 y2)    (inv-rotxform xform wd 0))
+                    (:mvb (ra2 dec2) (to-radec img x2 y2)))
+               (assert (< dec0 dec1))
+               (assert (< dec2 dec1))
+               (when (< ra0 ra2)
+                 (setf (rotxform-flip xform) t))
+               (format t "~%Best Angle: ~6,2F, NeedsFlip? ~A"
+                       ang (if (rotxform-flip xform) "Yes" "No"))
+               ))
+        (update-image-center)
+        xform
         ))))
+
+#|
+(progn
+  (find-angle *saved-img*)
+  (values))
+(let+ ((ans  (loop for ang from 0 below 360 collect
+                     (cons ang (multiple-value-list (find-angle *saved-img* ang))))))
+  (plt:plot 'test (mapcar #'first ans) (mapcar #'second ans)
+            :clear t)
+  (plt:plot 'test2 (mapcar #'first ans) (mapcar #'third ans)
+            :clear t
+            :yrange '(0 0.1)))
+ |#
+  
+(defun bare-canon-view (img)
+  (let+ ((xform   (find-angle img))
+         (arr     (img-arr img))
+         ((ht wd) (array-dimensions arr))
+         (cwd     (* 2 (rotxform-cxc xform)))
+         (cht     (* 2 (rotxform-cyc xform)))
+         (cimg    (copy-img img))
+         (carr    (make-array `(,cht ,cwd)
+                              :element-type 'single-float
+                              :initial-element 0f0)))
+    (setf (img-arr cimg)       carr
+          (img-canon cimg)     xform)
+    (labels ((wc-to-pix (x y)
+               (let+ ((:mvb (xu yu) (inv-rotxform xform x y)))
+                 (values (round xu)
+                         (round yu)))
+               ))
+      (loop for row from 0 below cht do
+              (loop for col from 0 below cwd do
+                      (let+ ((:mvb (scol srow) (wc-to-pix col row)))
+                        (when (array-in-bounds-p arr srow scol)
+                          (setf (aref carr row col) (aref arr srow scol)))
+                        )))
+      (show-img 'canon cimg)
+      cimg
+      )))
 
 (defun canon-view (img)
   (let ((cimg (bare-canon-view img)))
     (annotate-cimg cimg)
+    cimg
     ))
 
 (defun short-format-ra (radeg)
@@ -314,11 +398,11 @@ https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/345/gaia2&-c=240.005064%
 
 (defun annotate-cimg (img)
   (plt:with-delayed-update ('canon)
-    (let+ ((arr  (img-arr img))
+    (let+ ((arr     (img-arr img))
            ((ht wd) (array-dimensions arr))
            (info    (img-canon img)))
       (plt:draw-text 'canon "N"
-                     `((:data ,(round wd 2)) (:data 20))
+                     `((:data ,(round wd 2)) (:data ,(- ht 20)))
                      :font-size 16
                      :color :yellow)
       (plt:draw-text 'canon "E"
@@ -328,35 +412,36 @@ https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/345/gaia2&-c=240.005064%
       (labels ((pix-to-radec (x y)
                  (let+ ((:mvb (xu yu) (inv-rotxform info x y)))
                    (to-radec img xu yu))))
-        (let+ ((:mvb (α1t δ1) (pix-to-radec 0 0))
-               (:mvb (α0t _ ) (pix-to-radec wd 0))
-               (:mvb (α0b δ0) (pix-to-radec wd ht))
-               (:mvb (α1b _)  (pix-to-radec 0 ht))
-               (α-lo (floor (min α0b α0t α1b α1t)))
-               (α-hi (ceiling (max α0b α0t α1b α1t)))
-               (δ-lo (floor δ0))
-               (δ-hi (ceiling δ1)))
-          (print (list δ-lo δ-hi))
+        (let+ ((:mvb (αbl δbl) (pix-to-radec 0 0))
+               (:mvb (αbr δbr) (pix-to-radec wd 0))
+               (:mvb (αtr δtr) (pix-to-radec wd ht))
+               (:mvb (αtl δtl) (pix-to-radec 0 ht))
+               (α-lo (floor (min αbl αtl αbr αtr)))
+               (α-hi (ceiling (max αbl αtl αbr αtr)))
+               (δ-lo (floor (min δbl δbr δtl δtr)))
+               (δ-hi (ceiling (max δbl δbr δtl δtr))))
           ;; Uniform grid assumes that plate distortions are visually
           ;; imperceptible.  Also, RA & Dec "lines", instead of
           ;; projected arcs with curvature is correct only to first
           ;; order.
           (labels ((ra-to-x-top (α)
-                     (* wd (- 1 (/ (- α α0t) (- α1t α0t)))))
+                     (* wd (/ (- α αtl) (- αtr αtl))))
                    (ra-to-x-bot (α)
-                     (* wd (- 1 (/ (- α α0b) (- α1b α0b)))))
-                   (dec-to-y (δ)
-                     (* ht (- 1 (/ (- δ δ0) (- δ1 δ0))))))
+                     (* wd (/ (- α αbl) (- αbr αbl))))
+                   (dec-to-y-left (δ)
+                     (* ht (/ (- δ δbl) (- δtl δbl))))
+                   (dec-to-y-right (δ)
+                     (* ht (/ (- δ δbr) (- δtr δbr)))))
             (loop for α from α-lo below α-hi by 1/12 do
                     (let ((xt  (ra-to-x-top α))
                           (xb  (ra-to-x-bot α)))
-                      (plt:plot 'canon `(,xb ,xt) `(,ht 0)
+                      (plt:plot 'canon `(,xb ,xt) `(0 ,ht)
                                 :color :gray50
                                 :alpha 0.5)))
             (loop for α from α-lo below α-hi by 1/4 do
                     (let ((xt  (ra-to-x-top α))
                           (xb  (ra-to-x-bot α)))
-                      (plt:plot 'canon `(,xb ,xt) `(,ht 0)
+                      (plt:plot 'canon `(,xb ,xt) `(0 ,ht)
                                 :color :gray50
                                 :thick 2
                                 :alpha 0.5)
@@ -366,18 +451,20 @@ https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/345/gaia2&-c=240.005064%
                                      :color :yellow
                                      :alpha 0.5)))
             (loop for δ from δ-lo below δ-hi by 1/12 do
-                    (let ((y  (dec-to-y δ)))
-                      (plt:plot 'canon `(0 ,wd) `(,y ,y)
+                    (let ((yl  (dec-to-y-left δ))
+                          (yr  (dec-to-y-right δ)))
+                      (plt:plot 'canon `(0 ,wd) `(,yl ,yr)
                                 :color :gray50
                                 :alpha 0.5)))
             (loop for δ from δ-lo below δ-hi by 1/4 do
-                    (let ((y  (dec-to-y δ)))
-                      (plt:plot 'canon `(0 ,wd) `(,y ,y)
+                    (let ((yl  (dec-to-y-left δ))
+                          (yr  (dec-to-y-right δ)))
+                      (plt:plot 'canon `(0 ,wd) `(,yl ,yr)
                                 :thick 2
                                 :color :gray50
                                 :alpha 0.5)
                       (plt:draw-text 'canon (short-format-dec δ)
-                                     `((:frac 0.98) (:data ,y))
+                                     `((:frac 0.98) (:data ,yr))
                                      :align :ne
                                      :color :yellow
                                      :alpha 0.5)))
@@ -385,7 +472,9 @@ https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/345/gaia2&-c=240.005064%
     
 #|
 (parallactic-angle *saved-img*)
-(canon-view *saved-img*)
+(defvar *saved=cimg*)
+(setf *saved-cimg*
+      (canon-view *saved-img*))
 (show-img 'img *saved-img*)
  |#
 
@@ -581,7 +670,7 @@ cr_ra cr_dec radius)))
   (let+ ((ra     (star-ra star))
          (dec    (star-dec star))
          (cdec   (cos (dtor dec)))
-         (tol    1.5) ;; arcsec
+         (tol    3) ;; arcsec
          (cat    (gethash (floor (- ra (/ tol 3600 cdec))) (img-ncat img)))
          (start  (um:nlet iter ((cat cat))
                      (unless (endp cat)

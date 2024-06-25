@@ -85,7 +85,9 @@
   himg             ;; The cross-correlation image
   cat              ;; Text Catalog from Vizier Gaia DR2
   ncat             ;; Fast lookup table for catalog
-  canon)           ;; Holds canonical view rotation info
+  canon            ;; Holds canonical view rotation info
+  is-see           ;; True when image is from a Seestar S50
+  )
 
 (defstruct star
   x y              ;; X, Y position in image

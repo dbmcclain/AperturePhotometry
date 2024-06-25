@@ -40,15 +40,21 @@
               )))
 
       ;; extract an image
-      (let ((naxis  (nquery-header hdr "naxis"))
-            (bitpix (nquery-header hdr "bitpix"))
-            (naxis1 (nquery-header hdr "naxis1"))
-            (naxis2 (nquery-header hdr "naxis2"))
-            (naxis3 (or (nquery-header hdr "naxis3") 1))
-            (bzero  (truncate (or (nquery-header hdr "bzero")  0)))
-            (bscale (truncate (or (nquery-header hdr "bscale") 1)))
-            (bayer  (nquery-header hdr "bayerpat")) ;; should return as a quoted symbol, e.g., 'GRBG
-            (gain   (or (nquery-header hdr "gain") 150)))
+      (let* ((naxis  (nquery-header hdr "naxis"))
+             (bitpix (nquery-header hdr "bitpix"))
+             (naxis1 (nquery-header hdr "naxis1"))
+             (naxis2 (nquery-header hdr "naxis2"))
+             (naxis3 (or (nquery-header hdr "naxis3") 1))
+             (bzero  (truncate (or (nquery-header hdr "bzero")  0)))
+             (bscale (truncate (or (nquery-header hdr "bscale") 1)))
+             (bayer  (nquery-header hdr "bayerpat")) ;; should return as a quoted symbol, e.g., 'GRBG
+             (gain   (or (nquery-header hdr "gain") 150))
+             (instr  (query-header hdr "INSTRUME"))
+             (is-seestar (search "Seestar" instr
+                                 :test #'equalp))
+             ;; (row-order (query-header hdr "ROWORDER"))
+             )
+
         (when (and naxis
                    bitpix
                    naxis1
@@ -115,7 +121,8 @@
                :med  med
                :mad  mad
                :hdr  hdr
-               :gain gain)
+               :gain gain
+               :is-see is-seestar)
               ))))
       )))
 

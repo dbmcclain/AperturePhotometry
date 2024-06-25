@@ -926,7 +926,6 @@
                :clear  t
                ;; :neg t
                :magn   sf
-               :flipv  t
                :zrange `(,lo ,hi))
     (plt:set-move-augmentation pane
                                (when (img-stars img)
