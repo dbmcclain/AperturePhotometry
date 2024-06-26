@@ -169,8 +169,10 @@ https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/345/gaia2&-c=240.005064%
             phi)))
 
 (defun parallactic-angle (img)
-  ;; I don't think this is correct... See FIND-ANGLE below.
-  ;; Plate solution accounts for many more distortions.
+  ;; I don't think this is correct... See FIND-ANGLE below.  Plate
+  ;; solution accounts for many more distortions. You can't
+  ;; necessarily obtain the parallactic angle from the IWC transform
+  ;; alone.
   (let+ ((hdr    (img-hdr img))
          ;; transform from pixels to IWS
          (cd1_1  (nquery-header hdr "CD1_1"))
