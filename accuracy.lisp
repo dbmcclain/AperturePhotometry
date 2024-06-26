@@ -169,6 +169,8 @@ https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/345/gaia2&-c=240.005064%
             phi)))
 
 (defun parallactic-angle (img)
+  ;; I don't think this is correct... See FIND-ANGLE below.
+  ;; Plate solution accounts for many more distortions.
   (let+ ((hdr    (img-hdr img))
          ;; transform from pixels to IWS
          (cd1_1  (nquery-header hdr "CD1_1"))
@@ -194,6 +196,7 @@ https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/345/gaia2&-c=240.005064%
  |#
 
 ;; ---------------------------------------------------
+;; Transformers to/from Canonical View
 
 (defstruct rotxform
   theta   ;; parallactic angle + 180 deg
@@ -240,6 +243,8 @@ https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/345/gaia2&-c=240.005064%
       )))
 
 ;; ---------------------------------------------------
+;; Canonical View - Image is rotated/flipped to show N at top, E to
+;; left.
 
 #|
 (parallactic-angle *saved-img*)
@@ -485,6 +490,8 @@ https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/345/gaia2&-c=240.005064%
  |#
 
 
+;; ---------------------------------------------------------------
+
 (defun to-radec (img xp yp)
   (let+ ((hdr    (img-hdr img))
          ;; Center coords
@@ -602,6 +609,8 @@ https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/345/gaia2&-c=240.005064%
                (get-star-pos star))))
     (split-list-task #'handle-sublist (img-stars img) 4)))
 
+;; ---------------------------------------------------------------
+
 (defun get-catalog (img)
   (format t "~%Requesting star catalog from Vizier...")
   (let+ ((hdr    (img-hdr img))
@@ -679,6 +688,8 @@ cr_ra cr_dec radius)))
               ))
           )))))
                          
+;; ---------------------------------------------------------------
+
 (defun find-star-in-cat (img star)
   (let+ ((ra     (star-ra star))
          (dec    (star-dec star))
