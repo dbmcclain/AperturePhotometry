@@ -11,6 +11,9 @@
 (defun inv-magn (img mag)
   (expt 10f0 (* -0.4f0 (- mag (img-mag-off img)))))
 
+;; -----------------------------------------------------------------------------
+;; Parallelism Support - so easy using Actors...
+
 (defun split-task (farmer-fn start end nfarmers)
   ;; farm out a long running task
   (flet ((farmed (from to)
@@ -43,14 +46,18 @@
       )))
 
 (defmacro merge-splits (expr)
+  ;; For use in coalescing the sublists returned from a split task
   `(reduce #'nconc
            (multiple-value-list
             ,expr)))
 
-(defun map-reduce (farmer-fn lst nfarms)
+(defun split-map (mapping-fn lst nfarms)
+  ;; Apply farmer-fn to every element of lst. Return mapped list.
+  ;; Mapping function should return a list item or NIL, since we are
+  ;; assembling the result using NCONC.
   (flet ((sublist-handler (lst)
            (loop for item in lst nconc
-                   (funcall farmer-fn item))
+                   (funcall mapping-fn item))
            ))
   (merge-splits
    (split-list-task #'sublist-handler lst nfarms))
