@@ -121,6 +121,8 @@ The Vespara II also does not provide a FITS stacked image - we have to stack the
 
 But... that image (2160 x 3840) is too large to hand off to the FFT2D function. So we detect that problem, if it occurs, and resort to doing the 2D FFT ourselves, row by row, column by column. And to speed it up, we parallelize this process in both dimensions, farming out quarter-slices of the image to the worker pool.
 
+This project has turned out to be a literal Smorgasbord of interesting algorithms and programming techniques. We have root finding, to located the correct display angle in the canonical display, optimization methods in PSF fitting, Actors threading for shared workloads and embarrassingly parallel problems, self-switching FFT routines when the load is too great, and on and on. It has been really interesting overall, and I invite anyone to dive in and understand many of the methods used.
+
 <img width="1370" alt="New Canonical Display" src="https://github.com/dbmcclain/AperturePhotometry/assets/3160577/8e129950-99ca-450b-8b06-26a482f78d94">
 
 
