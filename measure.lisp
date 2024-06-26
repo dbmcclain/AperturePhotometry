@@ -25,6 +25,23 @@
                             (farmed ix (min end (+ ix incr)))))
                   )))))
 
+(defun split-list-task (farmer-fn lst nfarms)
+  (let ((qs (make-array nfarms
+                        :initial-element nil))
+        (qix 0))
+    (dolist (item lst)
+      (push item (aref qs (mod (incf qix) nfarms))))
+    (flet ((farmed (lst)
+             (create
+              (lambda (cust)
+                (send cust (funcall farmer-fn lst)))
+              )))
+      (with-recursive-ask
+        (ask (apply #'fork
+                    (loop for q across qs collect (farmed q))
+                    )))
+      )))
+
 ;; ---------------------------------------------------------------
 ;; For manual checking
 ;;
@@ -487,6 +504,7 @@
 (defun find-stars (ref-img &key (thresh 5) fimg)
   ;; thresh in sigma units
   ;; Find and measure stars in the image.
+  (format t "~%Finding stars...")
   (let+ ((krnl        (img-fake-star ref-img))
          (s0sq        (img-s0sq ref-img))
          (nsigma      thresh)
@@ -797,6 +815,11 @@
       ;; x, y are CAPI mouse coords,
       ;; xx, yy are star image array coords.
       (let+ ((:mvb (_xx _yy arr) (canon-xform img xx yy)))
+        (when (img-canon img)
+          (let+ ((:mvb (ra dec) (to-radec img _xx _yy)))
+            (setf (capi:interface-title (capi:element-interface pane))
+                  (format nil "Canonical View:  ~A   ~A" (format-ra ra) (format-dec dec)))
+            ))
         (when (array-in-bounds-p arr _yy _xx)
           (let+ ((star (find-nearest-star star-db _xx _yy)))
             (when star

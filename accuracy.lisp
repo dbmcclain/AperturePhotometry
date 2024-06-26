@@ -589,15 +589,21 @@ https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/345/gaia2&-c=240.005064%
 (to-radec *saved-img* 1080 1920)        ;; bot-right      
 (to-radec *saved-img* 0 1920)           ;; bot-left
   |#
-  
+
 (defun get-star-positions (img)
-  (dolist (star (img-stars img))
-    (let+ ((:mvb (α δ) (to-radec img (star-x star) (star-y star))))
-      (setf (star-ra star)  (mod α 360)
-            (star-dec star) δ)
-      )))
+  (format t "~%Using plate solution to assign star positions...")
+  (labels ((get-star-pos (star)
+             (let+ ((:mvb (α δ) (to-radec img (star-x star) (star-y star))))
+               (setf (star-ra star)  (mod α 360)
+                     (star-dec star) δ)
+               ))
+           (handle-sublist (lst)
+             (dolist (star lst)
+               (get-star-pos star))))
+    (split-list-task #'handle-sublist (img-stars img) 4)))
 
 (defun get-catalog (img)
+  (format t "~%Requesting star catalog from Vizier...")
   (let+ ((hdr    (img-hdr img))
          (cr_ra  (nquery-header hdr "CRVAL1"))
          (cr_dec (nquery-header hdr "CRVAL2"))
@@ -623,6 +629,7 @@ cr_ra cr_dec radius)))
     ))
 
 (defun gen-fast-cat-index (img)
+  (format t "~%Catalog Indexing...")
   (let ((tbl  (make-hash-table :test #'=)))
     (um:nlet iter ((ix  -1)
                    (cat (img-ncat img)))
@@ -640,6 +647,7 @@ cr_ra cr_dec radius)))
     ))
 
 (defun prep-cat (img)
+  (format t "~%Catalog Prep...")
   (um:nlet iter ((cat (img-cat img)))
     (when cat
       (let ((str (car cat)))
@@ -647,30 +655,29 @@ cr_ra cr_dec radius)))
                 (char= (char str 0) #\#))
             (go-iter (cdr cat))
           ;; else - start of catalog proper
-          (let ((hdr1  str)
-                (hdr2  (cadr cat)))
-            (um:nlet inner ((cat (nthcdr 3 cat))
-                            (ctr 0)
-                            (ans nil))
-              (if (endp cat)
-                  (progn
-                    (format t "~%~D stars in catalog" ctr)
-                    (setf (img-ncat img) (stable-sort
-                                          (sort ans #'< :key #'cadr)
-                                          #'< :key #'car)))
-                (let+ ((str   (car cat)))
-                  (cond ((plusp (length str))
-                         (let+ ((strs  (um:split-string str :delims '(#\|)))
-                                ((rastr decstr _ _ _ gmagstr . _) strs)
-                                (ra  (read-from-string rastr))
-                                (dec (read-from-string decstr))
-                                (gmag (read-from-string gmagstr)))
-                           (go-inner (cdr cat) (1+ ctr) (cons `(,ra ,dec ,gmag) ans))
-                           ))
-                        (t
-                         (go-inner (cdr cat) ctr ans))
-                        ))))
-            ))))))
+          (flet ((handle-sublist (lst)
+                   (loop for str in lst nconc
+                           (when (plusp (length str))
+                             (let+ ((strs  (um:split-string str :delims '(#\|)))
+                                    ((rastr decstr _ _ _ gmagstr . _) strs)
+                                    (ra   (read-from-string rastr))
+                                    (dec  (read-from-string decstr))
+                                    (gmag (read-from-string gmagstr)))
+                               `((,ra ,dec ,gmag))
+                               ))
+                         )))
+            (let+ ((hdr1  str)
+                   (hdr2  (cadr cat))
+                   (ncat  (reduce #'nconc
+                                  (multiple-value-list
+                                   (split-list-task #'handle-sublist (nthcdr 3 cat) 4))
+                                  )))
+              (format t "~%~D stars in catalog" (length ncat))
+              (setf (img-ncat img) (stable-sort
+                                    (sort ncat #'< :key #'cadr)
+                                    #'< :key #'car))
+              ))
+          )))))
                          
 (defun find-star-in-cat (img star)
   (let+ ((ra     (star-ra star))
@@ -715,22 +722,30 @@ cr_ra cr_dec radius)))
 
 
 (defun find-stars-in-cat (img)
-  (let ((found nil))
-    (dolist (star (img-stars img))
-      (let ((ans (find-star-in-cat img star)))
-        (if ans
-            (let+ (( (_ dra ddec _ _ cmag) ans))
-              (push star found)
-              (setf (star-catv star) cmag
-                    (star-dx star) dra
-                    (star-dy star) ddec))
-          (setf (star-catv star) nil
-                (star-dx star) nil
-                (star-dy star) nil))
-        ))
-    (format t "~%~D stars found in catalog" (length found))
-    (hilight-stars 'stars found :yellow)
-    ))
+  (format t "~%Finding stars in catalog...")
+  (flet ((handle-sublist (lst)
+           (loop for star in lst nconc
+                   (let ((ans (find-star-in-cat img star)))
+                     (if ans
+                         (let+ (( (_ dra ddec _ _ cmag) ans))
+                           (setf (star-catv star) cmag
+                                 (star-dx   star) dra
+                                 (star-dy   star) ddec)
+                           `(,star))
+                       (progn
+                         (setf (star-catv star) nil
+                               (star-dx   star) nil
+                               (star-dy   star) nil)
+                         nil))
+                     ))
+           ))
+    (let+ ((found  (reduce #'nconc
+                           (multiple-value-list
+                            (split-list-task #'handle-sublist (img-stars img) 4)
+                            ))))
+      (format t "~%~D stars found in catalog" (length found))
+      (hilight-stars 'stars found :yellow)
+      )))
                     
 #|
 (get-star-positions *saved-img*)
