@@ -11,6 +11,20 @@
 (defun inv-magn (img mag)
   (expt 10f0 (* -0.4f0 (- mag (img-mag-off img)))))
 
+(defun split-task (farmer-fn start end nfarmers)
+  ;; farm out a long running task
+  (flet ((farmed (from to)
+           (create
+            (lambda (cust)
+              (send cust (funcall farmer-fn from to)))
+            )))
+    (with-recursive-ask
+      (ask (apply #'fork
+                  (let ((incr (ceiling (- end start) nfarmers)))
+                    (loop for ix from start below end by incr collect
+                            (farmed ix (min end (+ ix incr)))))
+                  )))))
+
 ;; ---------------------------------------------------------------
 ;; For manual checking
 ;;
@@ -483,54 +497,45 @@
          (margin      (1+ ring-radius))
          (srch-box    (inset-box (make-box-of-array harr) margin margin))
          ((lf tp rt bt) srch-box)
-         (midx        (truncate (+ lf rt) 2))
-         (midy        (truncate (+ tp bt) 2))
-         (srch-arr    (make-masked-array harr srch-box))
-         (srchr       (lambda (srch-box)
-                        (create
-                         (lambda (cust)
-                           (send cust
-                                 (loop for mult in '(200 100 50 25 12 6 1)
-                                       for mult-thr = (* mult thr)
-                                       nconc
-                                         (loop for y from (box-top srch-box) below (box-bottom srch-box)
-                                               nconc
-                                                 (loop for x from (box-left srch-box) below (box-right srch-box)
-                                                       nconc
-                                                         (when (>= (bref srch-arr y x) mult-thr)
-                                                           (let+ ((:mvb (yc xc pk)   (locate-peak srch-arr y x)))
-                                                             (when (box-contains-pt-p srch-box xc yc)
-                                                               (let+ ((gain   (img-gain ref-img)) ;; e-/ADU
-                                                                      (ampl   (* gain (aref harr yc xc)))
-                                                                      (tnoise (sqrt (+ ampl (* gain gain s0sq))))
-                                                                      (snr    (/ ampl tnoise)))
-                                                                 (when (>= snr nsigma)
-                                                                   ;; everything passed, so clear the
-                                                                   ;; mask so that we won't find this
-                                                                   ;; one again.
-                                                                   (zap-peak srch-arr yc xc thr)
-                                                                   (let+ ((:mvb (xcent ycent) (centroid himg xc yc)))
-                                                                     `(,(make-star
-                                                                         :x    xcent
-                                                                         :y    ycent
-                                                                         :pk   pk
-                                                                         :mag  (magn ref-img ampl)
-                                                                         :snr  (db10 snr)
-                                                                         :flux ampl
-                                                                         :sd   tnoise))
-                                                                     ))))))
-                                                       )))))
-                         )))
-         ;; Search 4 quadrants in parallel
-         (srch1       (funcall srchr (make-box lf tp midx midy)))
-         (srch2       (funcall srchr (make-box midx tp rt midy)))
-         (srch3       (funcall srchr (make-box lf midy midx bt)))
-         (srch4       (funcall srchr (make-box midx midy rt bt)))
-         (:mvb (stars1 stars2 stars3 stars4) (ask (fork srch1 srch2 srch3 srch4))))
-    (values
-     (concatenate 'list stars1 stars2 stars3 stars4)
-     fimg)
-    ))
+         (srch-arr    (make-masked-array harr srch-box)))
+    (flet ((searcher (start end)
+             (let ((srch-box (make-box lf start rt end)))
+               (loop for mult in '(200 100 50 25 12 6 1)
+                     for mult-thr = (* mult thr)
+                     nconc
+                       (loop for y from (box-top srch-box) below (box-bottom srch-box)
+                             nconc
+                               (loop for x from (box-left srch-box) below (box-right srch-box)
+                                     nconc
+                                       (when (>= (bref srch-arr y x) mult-thr)
+                                         (let+ ((:mvb (yc xc pk)   (locate-peak srch-arr y x)))
+                                           (when (box-contains-pt-p srch-box xc yc)
+                                             (let+ ((gain   (img-gain ref-img)) ;; e-/ADU
+                                                    (ampl   (* gain (aref harr yc xc)))
+                                                    (tnoise (sqrt (+ ampl (* gain gain s0sq))))
+                                                    (snr    (/ ampl tnoise)))
+                                               (when (>= snr nsigma)
+                                                 ;; everything passed, so clear the
+                                                 ;; mask so that we won't find this
+                                                 ;; one again.
+                                                 (zap-peak srch-arr yc xc thr)
+                                                 (let+ ((:mvb (xcent ycent) (centroid himg xc yc)))
+                                                   `(,(make-star
+                                                       :x    xcent
+                                                       :y    ycent
+                                                       :pk   pk
+                                                       :mag  (magn ref-img ampl)
+                                                       :snr  (db10 snr)
+                                                       :flux ampl
+                                                       :sd   tnoise))
+                                                   ))))))
+                                     ))))))
+      (values
+       (mapcan #'identity  ;; concat farmed results
+               (multiple-value-list
+                (split-task #'searcher tp bt 4)))
+       fimg)
+      )))
 
 (defun centroid (img xc yc)
   (let+ ((arr   (img-arr img))
@@ -562,44 +567,27 @@
                  (case dir
                    (:fwd  (fft:fwd vec :dest dest))
                    (t     (fft:inv vec :dest dest))))
-               (make-row-farmer (dst start end dir)
-                 (create
-                  (lambda (cust)
-                    (loop for row from start below end do
-                            (let ((rdst (array-row dst row))
-                                  (rsrc (array-row arr row)))
-                              (fft rsrc rdst dir)
-                              ))
-                    (send cust))))
-               (make-col-farmer (src dst start end dir)
-                 (create
-                  (lambda (cust)
-                    (let+ ((nrows (array-dimension src 0)))
-                      (loop for col from start below end do
-                              (let+ ((csrc (array-col src col))
-                                     (ans  (fft csrc nil dir)))
-                                (loop for row from 0 below nrows do
-                                        (setf (aref dst row col) (aref ans row)))
-                                )))
-                    (send cust))
-                  )))
+               (row-handler (dst dir start end)
+                 (loop for row from start below end do
+                         (let ((rdst (array-row dst row))
+                               (rsrc (array-row arr row)))
+                           (fft rsrc rdst dir)
+                           )))
+               (col-handler (src dst dir start end)
+                 (let+ ((nrows (array-dimension src 0)))
+                   (loop for col from start below end do
+                           (let+ ((csrc (array-col src col))
+                                  (ans  (fft csrc nil dir)))
+                             (loop for row from 0 below nrows do
+                                     (setf (aref dst row col) (aref ans row)))
+                             )))))
         (let+ (((nrows ncols) (array-dimensions arr))
                (dst           (make-array (array-dimensions arr)
-                                          :element-type '(complex single-float)))
-               (nrows/4       (truncate nrows 4))
-               (row-farmers   (loop for start from 0 below nrows by nrows/4
-                                    collect
-                                    (make-row-farmer dst start (min (+ start nrows/4) nrows) dir)
-                                    ))
-               (_  (ask (apply #'fork row-farmers)))
-               (ncols/4       (truncate ncols 4))
-               (col-farmers   (loop for start from 0 below ncols by ncols/4
-                                    collect
-                                    (make-col-farmer dst dst start (min (+ start ncols/4) ncols) dir)
-                                    ))
-               (_ (ask (apply #'fork col-farmers))))
-          dst
-          )))
+                                          :element-type '(complex single-float))))
+         (split-task (um:curry #'row-handler dst dir)     0 nrows 4)
+         (split-task (um:curry #'col-handler dst dst dir) 0 ncols 4)
+         dst
+         )))
     ))
 
 (defun make-himg (img fimg)
@@ -647,7 +635,8 @@
                          (implant-subarray kwrk-arr krnl 0 0)
                          (send cust (flexible-fft2d (vm:shift kwrk-arr `(,(- kradius) ,(- kradius))) :fwd))
                          ))))
-         (:mvb (fimg fkrnl) (ask (fork img-proc krnl-proc)))
+         (:mvb (fimg fkrnl) (with-recursive-ask
+                              (ask (fork img-proc krnl-proc))))
          ;; Construct the G' matrix
          ;; FT of a correlation is the conj prod of their FT's
          (ffilt (map-array #'conj* fkrnl fimg))

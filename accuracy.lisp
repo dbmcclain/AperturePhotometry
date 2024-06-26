@@ -347,11 +347,10 @@ https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/345/gaia2&-c=240.005064%
             :clear t
             :yrange '(0 0.1)))
  |#
-  
+
 (defun bare-canon-view (img)
   (let+ ((xform   (find-angle img))
          (arr     (img-arr img))
-         ((ht wd) (array-dimensions arr))
          (cwd     (* 2 (rotxform-cxc xform)))
          (cht     (* 2 (rotxform-cyc xform)))
          (cimg    (copy-img img))
@@ -363,14 +362,16 @@ https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/345/gaia2&-c=240.005064%
     (labels ((wc-to-pix (x y)
                (let+ ((:mvb (xu yu) (inv-rotxform xform x y)))
                  (values (round xu)
-                         (round yu)))
+                         (round yu))))
+             (farmer (row-start row-end)
+               (loop for row from row-start below row-end do
+                       (loop for col from 0 below cwd do
+                               (let+ ((:mvb (scol srow) (wc-to-pix col row)))
+                                 (when (array-in-bounds-p arr srow scol)
+                                   (setf (aref carr row col) (aref arr srow scol)))
+                                 )))
                ))
-      (loop for row from 0 below cht do
-              (loop for col from 0 below cwd do
-                      (let+ ((:mvb (scol srow) (wc-to-pix col row)))
-                        (when (array-in-bounds-p arr srow scol)
-                          (setf (aref carr row col) (aref arr srow scol)))
-                        )))
+      (split-task #'farmer 0 cht 4)
       (show-img 'canon cimg)
       cimg
       )))
@@ -402,7 +403,7 @@ https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/345/gaia2&-c=240.005064%
            ((ht wd) (array-dimensions arr))
            (info    (img-canon img)))
       (plt:draw-text 'canon "N"
-                     `((:data ,(round wd 2)) (:data ,(- ht 30)))
+                     `((:data ,(round wd 2)) (:data ,(- ht 20)))
                      :font-size 16
                      :align :n
                      :color :yellow)
@@ -478,8 +479,9 @@ https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/345/gaia2&-c=240.005064%
 (setf *saved-cimg*
       (canon-view *saved-img*))
 (show-img 'img *saved-img*)
-(show-img 'canon *saved-cimg*)
-(annotate-cimg *saved-cimg*)
+(progn
+  (show-img 'canon *saved-cimg*)
+  (annotate-cimg *saved-cimg*))
  |#
 
 
