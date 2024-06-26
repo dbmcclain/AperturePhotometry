@@ -42,6 +42,20 @@
                     )))
       )))
 
+(defmacro merge-splits (expr)
+  `(reduce #'nconc
+           (multiple-value-list
+            ,expr)))
+
+(defun map-reduce (farmer-fn lst nfarms)
+  (flet ((sublist-handler (lst)
+           (loop for item in lst nconc
+                   (funcall farmer-fn item))
+           ))
+  (merge-splits
+   (split-list-task #'sublist-handler lst nfarms))
+  ))
+
 ;; ---------------------------------------------------------------
 ;; For manual checking
 ;;
@@ -549,9 +563,9 @@
                                                    ))))))
                                      ))))))
       (values
-       (mapcan #'identity  ;; concat farmed results
-               (multiple-value-list
-                (split-task #'searcher tp bt 4)))
+       (merge-splits
+        ;; concat farmed results
+        (split-task #'searcher tp bt 4))
        fimg)
       )))
 

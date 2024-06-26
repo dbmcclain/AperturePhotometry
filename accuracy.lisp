@@ -666,23 +666,19 @@ cr_ra cr_dec radius)))
                 (char= (char str 0) #\#))
             (go-iter (cdr cat))
           ;; else - start of catalog proper
-          (flet ((handle-sublist (lst)
-                   (loop for str in lst nconc
-                           (when (plusp (length str))
-                             (let+ ((strs  (um:split-string str :delims '(#\|)))
-                                    ((rastr decstr _ _ _ gmagstr . _) strs)
-                                    (ra   (read-from-string rastr))
-                                    (dec  (read-from-string decstr))
-                                    (gmag (read-from-string gmagstr)))
-                               `((,ra ,dec ,gmag))
-                               ))
-                         )))
+          (flet ((farmer-fn (str)
+                   (when (plusp (length str))
+                     (let+ ((strs  (um:split-string str :delims '(#\|)))
+                            ((rastr decstr _ _ _ gmagstr . _) strs)
+                            (ra   (read-from-string rastr))
+                            (dec  (read-from-string decstr))
+                            (gmag (read-from-string gmagstr)))
+                       `((,ra ,dec ,gmag))
+                       ))
+                   ))
             (let+ ((hdr1  str)
                    (hdr2  (cadr cat))
-                   (ncat  (reduce #'nconc
-                                  (multiple-value-list
-                                   (split-list-task #'handle-sublist (nthcdr 3 cat) 4))
-                                  )))
+                   (ncat  (map-reduce #'farmer-fn (nthcdr 3 cat) 4)))
               (format t "~%~D stars in catalog" (length ncat))
               (setf (img-ncat img) (stable-sort
                                     (sort ncat #'< :key #'cadr)
@@ -736,26 +732,21 @@ cr_ra cr_dec radius)))
 
 (defun find-stars-in-cat (img)
   (format t "~%Finding stars in catalog...")
-  (flet ((handle-sublist (lst)
-           (loop for star in lst nconc
-                   (let ((ans (find-star-in-cat img star)))
-                     (if ans
-                         (let+ (( (_ dra ddec _ _ cmag) ans))
-                           (setf (star-catv star) cmag
-                                 (star-dx   star) dra
-                                 (star-dy   star) ddec)
-                           `(,star))
-                       (progn
-                         (setf (star-catv star) nil
-                               (star-dx   star) nil
-                               (star-dy   star) nil)
-                         nil))
-                     ))
-           ))
-    (let+ ((found  (reduce #'nconc
-                           (multiple-value-list
-                            (split-list-task #'handle-sublist (img-stars img) 4)
-                            ))))
+  (flet ((farmer-fn (star)
+           (let ((ans (find-star-in-cat img star)))
+             (if ans
+                 (let+ (( (_ dra ddec _ _ cmag) ans))
+                   (setf (star-catv star) cmag
+                         (star-dx   star) dra
+                         (star-dy   star) ddec)
+                   `(,star))
+               (progn
+                 (setf (star-catv star) nil
+                       (star-dx   star) nil
+                       (star-dy   star) nil)
+                 nil))
+             )))
+    (let+ ((found  (map-reduce #'farmer-fn (img-stars img) 4)))
       (format t "~%~D stars found in catalog" (length found))
       (hilight-stars 'stars found :yellow)
       )))
