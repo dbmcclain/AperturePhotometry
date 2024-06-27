@@ -201,27 +201,26 @@
   ;; scan images from Left to right, top to bottom, there is no point
   ;; looking behind us in Y. Anything there would have already been zapped away.
   ;;
-  (let+ ((zstart  (bref arr y x))
-         (zlf     (bref arr y (1+ x)))
-         (zrt     (bref arr y (1- x)))
-         (zfwd    (bref arr (1+ y) x)))
-    ;; Choose the largest increase for the next direction
-    (if (> zlf zrt)
-        (if (> zlf zfwd)
-            (if (> zlf zstart)
-                (locate-peak arr y (1+ x))
-              (values y x zstart))
-          (if (> zfwd zstart)
-              (locate-peak arr (1+ y) x)
-            (values y x zstart)))
-      ;; else - zlf <= zfwd
-      (if (> zrt zfwd)
-          (if (> zrt zstart)
-              (locate-peak arr y (1- x))
-            (values y x zstart))
-        (if (> zfwd zstart)
-            (locate-peak arr (1+ y) x)
-          (values y x zstart))))
+  (declare (fixnum y x)
+           (array single-float arr))
+  (let* ((vmax  (bref arr y x))
+         (ymax  y)
+         (xmax  x))
+    (declare (single-float vmax)
+             (fixnum ymax xmax))
+    (loop for yp fixnum from y to (1+ y) do
+            (loop for xp fixnum from (1- x) to (1+ x) do
+                    (let ((vval  (bref arr yp xp)))
+                      (declare (single-float vval))
+                      (when (> vval vmax)
+                        (setf vmax vval
+                              ymax yp
+                              xmax xp))
+                      )))
+    (if (and (= y ymax)
+             (= x xmax))
+        (values y x vmax)
+      (locate-peak arr ymax xmax))
     ))
 
 (defun zap-peak (arr y x thr)

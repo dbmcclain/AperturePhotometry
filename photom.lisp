@@ -987,8 +987,8 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
                 :aspect 1
                 :alpha 0.3
                 :title "Matches: Catalog minus Star"
-                :xtitle "dα Cosδ [arcsec]"
-                :ytitle "dδ [arcsec]")
+                :xtitle "Δα Cosδ [arcsec]"
+                :ytitle "Δδ [arcsec]")
       (plt:draw-text 'miss
                      (format nil "Mean Radial Δ: ~5,2F (~5,2F)" mn sd)
                      '((:frac 0.05) (:frac 0.85)))
@@ -1150,7 +1150,7 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
             
 (defun phot-limit (img)
   (let* ((nf-sigma (* (img-gain img) (sqrt (img-s0sq img))))
-         (dom      '(7 22)))
+         (dom      '(7 24)))
     (labels ((inv-mag (x)
                (expt 10.0 (* -0.4 (- x (img-mag-off img)))))
              (nf (flux nf)

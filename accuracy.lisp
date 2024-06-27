@@ -335,7 +335,7 @@ https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/345/gaia2&-c=240.005064%
                (assert (< dec2 dec1))
                (when (< ra0 ra2)
                  (setf (rotxform-flip xform) t))
-               (format t "~%Best Angle: ~6,2F, NeedsFlip? ~A"
+               (format t "~%Best Angle: ~6,2F, Needs RA Flip? ~A"
                        ang (if (rotxform-flip xform) "Yes" "No"))
                ))
         (update-image-center)
@@ -682,8 +682,8 @@ cr_ra cr_dec radius)))
                    (hdr2  (cadr cat))
                    (ncat  (split-map #'mapping-fn (nthcdr 3 cat))))
               (format t "~%~D stars in catalog" (length ncat))
-              (setf (img-ncat img) (stable-sort
-                                    (sort ncat #'< :key #'cadr)
+              (setf (img-ncat img) (stable-sort                 ;; sort RA ascending
+                                    (sort ncat #'< :key #'cadr) ;; sort Dec ascending
                                     #'< :key #'car))
               ))
           )))))
