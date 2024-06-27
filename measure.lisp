@@ -584,14 +584,19 @@
       )))
 
 (defun centroid (img xc yc)
+  (declare (fixnum xc yc))
   (let+ ((arr   (img-arr img))
-         (mass 0)
-         (xmass 0)
-         (ymass 0))
-    (loop for iy from (- yc 3) to (+ yc 3) do
-            (loop for ix from (- xc 3) to (+ xc 3) do
-                    (let ((v  (max 0 (aref arr iy ix))))
-                      (incf mass v)
+         (mass  0f0)
+         (xmass 0f0)
+         (ymass 0f0))
+    (declare (single-float mass xmass ymass)
+             (array single-float arr))
+    (loop for iy fixnum from (- yc 3) to (+ yc 3) do
+            (loop for ix fixnum from (- xc 3) to (+ xc 3) do
+                    (let ((v  (max 0f0 (the single-float
+                                            (aref arr iy ix)))))
+                      (declare (single-float v))
+                      (incf mass  v)
                       (incf xmass (* (- ix xc) v))
                       (incf ymass (* (- iy yc) v)))))
     (if (plusp mass)
@@ -603,7 +608,7 @@
 (defun conj* (z1 z2)
   (* (conjugate z1) z2))
 
-(defun flexible-fft2d (arr dir &key dest)
+(defun fft2d (arr dir &key dest)
   (handler-case
       (case dir
         (:fwd (fft2d:fwd arr :dest dest))
@@ -667,7 +672,7 @@
                              (or fimg
                                  (let+ ((wrk-arr  (make-image-array htx wdx :initial-element 0f0)))
                                    (implant-subarray wrk-arr arr 0 0)
-                                   (flexible-fft2d wrk-arr :fwd))
+                                   (fft2d wrk-arr :fwd))
                                  )))
                      ))
          (krnl-proc (create
@@ -682,7 +687,7 @@
                               (kwrk-arr  (make-image-array htx wdx :initial-element 0f0)))
                          (map-array-into krnl (um:rcurry #'/ norm) krnl)
                          (implant-subarray kwrk-arr krnl 0 0)
-                         (send cust (flexible-fft2d (vm:shift kwrk-arr `(,(- kradius) ,(- kradius)))
+                         (send cust (fft2d (vm:shift kwrk-arr `(,(- kradius) ,(- kradius)))
                                                     :fwd :dest fkrnl))
                          ))))
          (:mvb (fimg fkrnl) (with-recursive-ask
@@ -692,7 +697,7 @@
          ;; Construct the G' matrix
          ;; FT of a correlation is the conj prod of their FT's
          (ffilt (map-array-into fkrnl #'conj* fkrnl fimg))
-         (chimg (flexible-fft2d ffilt :inv :dest ffilt))
+         (chimg (fft2d ffilt :inv :dest ffilt))
          (harr  (make-image-array ht wd)))
     (map-array-into harr #'realpart (extract-subarray chimg box))
     (let* ((med  (vm:median harr))
