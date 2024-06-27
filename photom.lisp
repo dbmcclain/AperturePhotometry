@@ -148,9 +148,13 @@
                     (send cust)))))
       (setf (img-s0sq img) s0sq)
       (let ((vmax (reduce #'max (vm:make-overlay-vector (img-arr img))))) 
-        (if (> vmax #.(- 65526 256))
+        (if (> vmax (if (img-is-see img)
+                        #.(- 65536 256)
+                      #.(- 4096 64)))
             (warn "Image likely contains blown-out stars")
-          (when (> vmax 32768)
+          (when (> vmax (if (img-is-see img)
+                            32768
+                          2048))
             (warn "Image possibly contains saturated stars"))))
       (β _
           (progn
@@ -887,9 +891,9 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
                 :symbol :cross))
     |#
     (phot-limit img)
-    (format t "~%Count     Star Pos      Mag     SNR     Flux      SD       RA       Dec     GMag     dx     dy")
-    (format t "~%         X       Y              dBσ                        deg      deg           arcsec arcsec")
-    (format t "~%-----------------------------------------------------------------------------------------------")
+    (format t "~%Count     Star Pos      Mag     SNR     Flux      SD       RA       Dec     GMag     dx     dy    Peak")
+    (format t "~%         X       Y              dBσ                        deg      deg           arcsec arcsec    ADU")
+    (format t "~%------------------------------------------------------------------------------------------------------")
     (loop for star in (sort stars #'< :key sort-key)
           for ct from 1
           do
@@ -903,8 +907,9 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
                              (dec  star-dec)
                              (cmag star-catv)
                              (dx   star-dx)
-                             (dy   star-dy)) star
-              (format t "~%~4D  ~6,1F  ~6,1F  ~6,2F  ~6,1F  ~7,2G  ~8,2G  ~8,4F  ~7,4F  ~5,2F  ~5,2F  ~5,2F"
+                             (dy   star-dy)
+                             (pk   star-pk)) star
+              (format t "~%~4D  ~6,1F  ~6,1F  ~6,2F  ~6,1F  ~7,2G  ~8,2G  ~8,4F  ~7,4F  ~5,2F  ~5,2F  ~5,2F  ~5D"
                       ;; crude mag adj based on 3c273
                       ct
                       x y
@@ -915,7 +920,8 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
                       (or dec 0.0)
                       (or cmag 0.0)
                       (or dx   0.0)
-                      (or dy   0.0))
+                      (or dy   0.0)
+                      (round pk))
               ))))
 
 #|

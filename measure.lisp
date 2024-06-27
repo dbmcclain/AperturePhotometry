@@ -203,31 +203,91 @@
 ;; --------------------------------------------
 
 (defun locate-peak (arr y x)
-  ;; Starting from X, Y, march to the peak of the star image. Since we
-  ;; scan images from Left to right, top to bottom, there is no point
-  ;; looking behind us in Y. Anything there would have already been zapped away.
+  ;; Starting from X, Y, march to the peak of the star image.
+  ;;
+  ;; Since we scan images from Left to right, top to bottom, there is
+  ;; no point looking behind us in Y. Anything there would have
+  ;; already been zapped away.
+  ;;
+  ;; As we march along, no point looking behind us in X, from whichever
+  ;; direction we arrived.
+  ;;
+  ;; State machine to avoid ever looking at any location more than once.
+  ;;
+  ;; State diagram:
+  ;;
+  ;;    - . ?  = arrival state
+  ;;    ? ? ?  
+  ;; 
+  ;; Key: - = don't bother looking,
+  ;;      . = you are here,
+  ;;      ? = potential next pixel.
   ;;
   (declare (fixnum y x)
            (array single-float arr))
-  (let* ((vmax  (bref arr y x))
-         (ymax  y)
-         (xmax  x))
+  (let ((vmax  (bref arr y x))
+        (ymax  y)
+        (xmax  x)
+        next)
     (declare (single-float vmax)
              (fixnum ymax xmax))
-    (loop for yp fixnum from y to (1+ y) do
-            (loop for xp fixnum from (1- x) to (1+ x) do
-                    (let ((vval  (bref arr yp xp)))
-                      (declare (single-float vval))
-                      (when (> vval vmax)
-                        (setf vmax vval
-                              ymax yp
-                              xmax xp))
-                      )))
-    (if (and (= y ymax)
-             (= x xmax))
-        (values y x vmax)
-      (locate-peak arr ymax xmax))
-    ))
+    (labels
+        ((tst (yp xp next-state)
+           (declare (fixnum yp xp))
+           (let ((vval (bref arr yp xp)))
+             (declare (single-float vval))
+             (when (> vval vmax)
+               (setf vmax vval
+                     ymax yp
+                     xmax xp
+                     next next-state))
+             ))
+         
+         (next ()
+           (let ((next-state next))
+             (setf x    xmax
+                   y    ymax
+                   next #'end)
+             (funcall next-state)))
+
+         (end ()
+           (values y x vmax))
+         
+         #|
+           -  .  ?0  == ?0 ==>  - . ?0             -  .  ?0
+           ?1 ?2 ?3             - - ?3  -- ?3 ==>  ?1 ?2 ?3
+           |#
+
+         (-.-_??? ()
+           (let ((yp (1+ y)))
+             (tst yp (1- x) #'?.-_???)
+             (tst yp x      #'-.-_???)
+             (tst yp (1+ x) #'-.?_???))
+           (next))
+           
+         (-.?_??? ()
+           (tst y (1+ x) #'-.?_--?)
+           (-.-_???))
+
+         (?.-_??? ()
+           (tst y (1- x) #'?.-_?--)
+           (-.-_???))
+
+         (-.?_--? ()
+           (let ((xp (1+ x)))
+             (tst y      xp #'-.?_--?)
+             (tst (1+ y) xp #'-.?_???))
+           (next))
+
+         (?.-_?-- ()
+           (let ((xp (1- x)))
+             (tst y      xp #'?.-_?--)
+             (tst (1+ y) xp #'?.-_???))
+           (next)) )
+      
+      (setf next #'end)
+      (-.?_???) ;; initial arrival was from left
+      )))
 
 (defun zap-peak (arr y x thr)
   ;; Clear the mask over all connected pixels, starting from the peak
@@ -538,6 +598,7 @@
          (nsigma      thresh)
          (:mvb (himg fimg) (make-himg ref-img fimg))
          (harr        (img-arr himg))
+         (arr         (img-arr ref-img))
          (thr         (* nsigma (sqrt s0sq)))
          (ring-radius (fake-radius krnl))
          (margin      (1+ ring-radius))
@@ -565,7 +626,8 @@
                                                  ;; mask so that we won't find this
                                                  ;; one again.
                                                  (zap-peak srch-arr yc xc thr)
-                                                 (let+ ((:mvb (xcent ycent) (centroid himg xc yc)))
+                                                 (let+ ((:mvb (xcent ycent) (centroid himg xc yc))
+                                                        (pk   (peak-val arr yc xc 4)))
                                                    `(,(make-star
                                                        :x    xcent
                                                        :y    ycent
@@ -582,6 +644,23 @@
         (split-task #'searcher tp bt))
        fimg)
       )))
+
+(defun peak-val (arr yc xc radius)
+  (let ((vmax 0))
+    (loop for iy from (- yc radius) to (+ yc radius) do
+            (loop for ix from (- xc radius) to (+ xc radius) do
+                    (let ((val (aref arr iy ix)))
+                      (when (> val vmax)
+                        (setf vmax val))
+                      )))
+    vmax
+    ))
+
+#|
+(let ((stars (remove-if (um:rcurry #'< 600e3) (img-stars *saved-img*)
+                        :key #'star-flux)))
+  (inspect (sort stars #'< :key #'star-pk)))
+ |#
 
 (defun centroid (img xc yc)
   (declare (fixnum xc yc))

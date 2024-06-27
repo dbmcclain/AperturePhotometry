@@ -51,8 +51,7 @@
              (gain   (or (nquery-header hdr "gain") 150))
              (instr  (query-header hdr "INSTRUME"))
              (is-seestar (search "Seestar" instr
-                                 :test #'equalp))
-             ;; (row-order (query-header hdr "ROWORDER"))
+                                 :test #'equalp)) 
              )
 
         (when (and naxis
@@ -91,8 +90,9 @@
             ;; show image statistics
             (let* ((med  (vm:median img))
                    (mad  (vm:mad img med))
-                   (sd   (* +mad/sd+ mad)))
-              (print (list :med med :mad mad :sigma sd))
+                   (sd   (* +mad/sd+ mad))
+                   (max  (reduce #'max (vec img))))
+              (print (list :med med :mad mad :sigma sd :max max))
               #|
               (plt:histogram 'img-histo
                              (map 'vector (lambda (x)
