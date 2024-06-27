@@ -14,7 +14,9 @@
 ;; -----------------------------------------------------------------------------
 ;; Parallelism Support - so easy using Actors...
 
-(defun split-task (farmer-fn start end nfarmers)
+(defvar *npar*  8)
+
+(defun split-task (farmer-fn start end)
   ;; farm out a long running task
   (flet ((farmed (from to)
            (create
@@ -23,17 +25,17 @@
             )))
     (with-recursive-ask
       (ask (apply #'fork
-                  (let ((incr (ceiling (- end start) nfarmers)))
+                  (let ((incr (ceiling (- end start) *npar*)))
                     (loop for ix from start below end by incr collect
                             (farmed ix (min end (+ ix incr)))))
                   )))))
 
-(defun split-list-task (farmer-fn lst nfarms)
-  (let ((qs (make-array nfarms
+(defun split-list-task (farmer-fn lst)
+  (let ((qs (make-array *npar*
                         :initial-element nil))
         (qix 0))
     (dolist (item lst)
-      (push item (aref qs (mod (incf qix) nfarms))))
+      (push item (aref qs (mod (incf qix) *npar*))))
     (flet ((farmed (lst)
              (create
               (lambda (cust)
@@ -51,7 +53,7 @@
            (multiple-value-list
             ,expr)))
 
-(defun split-map (mapping-fn lst nfarms)
+(defun split-map (mapping-fn lst)
   ;; Apply farmer-fn to every element of lst. Return mapped list.
   ;; Mapping function should return a list item or NIL, since we are
   ;; assembling the result using NCONC.
@@ -60,7 +62,7 @@
                    (funcall mapping-fn item))
            ))
   (merge-splits
-   (split-list-task #'sublist-handler lst nfarms))
+   (split-list-task #'sublist-handler lst))
   ))
 
 ;; ---------------------------------------------------------------
@@ -572,7 +574,7 @@
       (values
        (merge-splits
         ;; concat farmed results
-        (split-task #'searcher tp bt 4))
+        (split-task #'searcher tp bt))
        fimg)
       )))
 
@@ -623,8 +625,8 @@
         (let+ (((nrows ncols) (array-dimensions arr))
                (dst           (make-array (array-dimensions arr)
                                           :element-type '(complex single-float))))
-         (split-task (um:curry #'row-handler dst dir)     0 nrows 4)
-         (split-task (um:curry #'col-handler dst dst dir) 0 ncols 4)
+         (split-task (um:curry #'row-handler dst dir)     0 nrows)
+         (split-task (um:curry #'col-handler dst dst dir) 0 ncols)
          dst
          )))
     ))

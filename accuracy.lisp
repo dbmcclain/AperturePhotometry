@@ -378,7 +378,7 @@ https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/345/gaia2&-c=240.005064%
                                    (setf (aref carr row col) (aref arr srow scol)))
                                  )))
                ))
-      (split-task #'farmer 0 cht 4)
+      (split-task #'farmer 0 cht)
       (show-img 'canon cimg)
       cimg
       )))
@@ -609,7 +609,8 @@ https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/345/gaia2&-c=240.005064%
            (handle-sublist (lst)
              (dolist (star lst)
                (get-star-pos star))))
-    (split-list-task #'handle-sublist (img-stars img) 4)))
+    (split-list-task #'handle-sublist (img-stars img))
+    ))
 
 ;; ---------------------------------------------------------------
 
@@ -679,7 +680,7 @@ cr_ra cr_dec radius)))
                    ))
             (let+ ((hdr1  str)
                    (hdr2  (cadr cat))
-                   (ncat  (split-map #'mapping-fn (nthcdr 3 cat) 4)))
+                   (ncat  (split-map #'mapping-fn (nthcdr 3 cat))))
               (format t "~%~D stars in catalog" (length ncat))
               (setf (img-ncat img) (stable-sort
                                     (sort ncat #'< :key #'cadr)
@@ -747,7 +748,7 @@ cr_ra cr_dec radius)))
                        (star-dy   star) nil)
                  nil))
              )))
-    (let+ ((found  (split-map #'mapping-fn (img-stars img) 4)))
+    (let+ ((found  (split-map #'mapping-fn (img-stars img))))
       (format t "~%~D stars found in catalog" (length found))
       (hilight-stars 'stars found :yellow)
       )))
