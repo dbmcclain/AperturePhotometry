@@ -182,16 +182,22 @@
     ))
 
 (defun bref (arr iy ix)
-  (if (and
-       (array-in-bounds-p (masked-array-arr arr) iy ix)
-       (= 1 (aref (masked-array-mask arr) iy ix)))
-      (aref (masked-array-arr  arr) iy ix)
-    0f0))
+  (declare (fixnum iy ix))
+  (* (the single-float
+          (aref (masked-array-arr arr) iy ix))
+     (the single-float
+          (float (the (unsigned-byte 1)
+                      (aref (masked-array-mask arr) iy ix))
+                 1f0))
+     ))
 
 (defun set-mask (arr iy ix &optional (val 1))
+  (declare (fixnum iy ix)
+           ((unsigned-byte 1) val))
   (setf (aref (masked-array-mask arr) iy ix) val))
 
 (defun clr-mask (arr iy ix)
+  (declare (fixnum iy ix))
   (set-mask arr iy ix 0))
 
 ;; --------------------------------------------
@@ -597,11 +603,11 @@
 (defun conj* (z1 z2)
   (* (conjugate z1) z2))
 
-(defun flexible-fft2d (arr dir)
+(defun flexible-fft2d (arr dir &key dest)
   (handler-case
       (case dir
-        (:fwd (fft2d:fwd arr))
-        (t    (fft2d:inv arr)))
+        (:fwd (fft2d:fwd arr :dest dest))
+        (t    (fft2d:inv arr :dest dest)))
     (error () ;; image probably too large to handle in one go...
       (labels ((fft (vec dest dir)
                  (case dir
@@ -622,8 +628,9 @@
                                      (setf (aref dst row col) (aref ans row)))
                              )))))
         (let+ (((nrows ncols) (array-dimensions arr))
-               (dst           (make-array (array-dimensions arr)
-                                          :element-type '(complex single-float))))
+               (dst           (or dest
+                                  (make-array (array-dimensions arr)
+                                              :element-type '(complex single-float)))))
          (split-task (um:curry #'row-handler dst dir)     0 nrows)
          (split-task (um:curry #'col-handler dst dst dir) 0 ncols)
          dst
@@ -652,6 +659,8 @@
          (box       (make-box-of-array arr))
          (wdx       (um:ceiling-pwr2 wd))
          (htx       (um:ceiling-pwr2 ht))
+         (fkrnl     (make-array `(,htx ,wdx)
+                                :element-type '(complex single-float)))
          (img-proc  (create
                      (lambda (cust)
                        (send cust
@@ -673,14 +682,17 @@
                               (kwrk-arr  (make-image-array htx wdx :initial-element 0f0)))
                          (map-array-into krnl (um:rcurry #'/ norm) krnl)
                          (implant-subarray kwrk-arr krnl 0 0)
-                         (send cust (flexible-fft2d (vm:shift kwrk-arr `(,(- kradius) ,(- kradius))) :fwd))
+                         (send cust (flexible-fft2d (vm:shift kwrk-arr `(,(- kradius) ,(- kradius)))
+                                                    :fwd :dest fkrnl))
                          ))))
          (:mvb (fimg fkrnl) (with-recursive-ask
-                              (ask (fork img-proc krnl-proc))))
+                              (ask (fork img-proc
+                                         krnl-proc))
+                              ))
          ;; Construct the G' matrix
          ;; FT of a correlation is the conj prod of their FT's
-         (ffilt (map-array #'conj* fkrnl fimg))
-         (chimg (flexible-fft2d ffilt :inv))
+         (ffilt (map-array-into fkrnl #'conj* fkrnl fimg))
+         (chimg (flexible-fft2d ffilt :inv :dest ffilt))
          (harr  (make-image-array ht wd)))
     (map-array-into harr #'realpart (extract-subarray chimg box))
     (let* ((med  (vm:median harr))
