@@ -640,7 +640,8 @@ https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/345/gaia2&-c=240.005064%
       )))
 
 (defun #1=get-star-positions (img)
-  (get-plate-solution img)
+  (unless (img-plate img)
+    (get-plate-solution img))
   (format t "~%Using plate solution to assign star positions...")
   (labels ((get-star-pos (star)
              (let+ ((:mvb (α δ) (to-radec img (star-x star) (star-y star))))
@@ -656,21 +657,22 @@ https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/345/gaia2&-c=240.005064%
 ;; ---------------------------------------------------------------
 
 (defun get-catalog (img)
+  (unless (img-plate img)
+    (get-plate-solution img))
   (format t "~%Requesting star catalog from Vizier...")
-  (let+ ((hdr    (img-hdr img))
-         (cr_ra  (nquery-header hdr "CRVAL1"))
-         (cr_dec (nquery-header hdr "CRVAL2"))
-         ( (nypix nxpix)  (array-dimensions (img-arr img)))
+  (let+ (((nypix nxpix) (array-dimensions (img-arr img)))
+         (:mvb (cr_ra cr_dec) (to-radec img (/ nxpix 2) (/ nypix 2)))
+         (hdr    (img-hdr img))
          (xpxsiz (nquery-header hdr "XPIXSZ"))
          (ypxsiz (nquery-header hdr "YPIXSZ"))
          (foclen (nquery-header hdr "FOCALLEN"))
-         (radius (* 2
+         (radius (* 1
                     (rtod
                      (atan (/ (abs (complex (* nxpix xpxsiz) (* nypix ypxsiz)))
                               foclen 2000)))
                     ))
          (cmdstr (format nil
-"vizquery -mime=csv -source=I/345/gaia2 -c=~F%20~F -c.r=~F -c.u=deg -out.form='|' -out.add=RA_ICRS,DE_ICRS -out=pmRA -out=pmDE -out=Source -out=Gmag -out=RPmag -out=BPmag -out=Plx -out=RV -out=Rad -out=Lum Gmag=0..15"
+"vizquery -mime=csv -source=I/345/gaia2 -c=~F%20~F -c.r=~F -c.u=deg -out.form='|' -out.add=RA_ICRS,DE_ICRS -out=pmRA -out=pmDE -out=Source -out=Gmag -out=RPmag -out=BPmag -out=Plx -out=RV -out=Rad -out=Lum Gmag=0..16"
 cr_ra cr_dec radius)))
     (setf (img-cat img)
           (with-open-stream (sin (sys:open-pipe cmdstr :direction :input))
