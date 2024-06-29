@@ -380,7 +380,8 @@ https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/345/gaia2&-c=240.005064%
                ))
       (split-task #'farmer 0 cht)
       (show-img 'canon cimg)
-      cimg
+      (setf (img-cimg img)  cimg
+            (img-cimg cimg) cimg)
       )))
 
 (defun canon-view (img)
@@ -482,7 +483,8 @@ https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/345/gaia2&-c=240.005064%
     
 #|
 (parallactic-angle *saved-img*)
-(defvar *saved=cimg*)
+(defvar *saved-cimg*)
+(canon-view *saved-img*)
 (setf *saved-cimg*
       (canon-view *saved-img*))
 (show-img 'img *saved-img*)
@@ -494,35 +496,34 @@ https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/345/gaia2&-c=240.005064%
 
 ;; ---------------------------------------------------------------
 
+(defstruct platesoln
+  cr_ra cr_dec
+  cr_x cr_y
+  cd1_1 cd1_2 cd2_1 cd2_2
+  a_0_0 a_0_1 a_0_2 a_1_0 a_1_1 a_2_0
+  b_0_0 b_0_1 b_0_2 b_1_0 b_1_1 b_2_0)
+
 (defun to-radec (img xp yp)
-  (let+ ((hdr    (img-hdr img))
-         ;; Center coords
-         (cr_ra  (nquery-header hdr "CRVAL1"))
-         (cr_dec (nquery-header hdr "CRVAL2"))
-         (cr_x   (nquery-header hdr "CRPIX1"))
-         (cr_y   (nquery-header hdr "CRPIX2"))
-
-         ;; transform from pixels to IWS
-         (cd1_1  (nquery-header hdr "CD1_1"))
-         (cd1_2  (nquery-header hdr "CD1_2"))
-         (cd2_1  (nquery-header hdr "CD2_1"))
-         (cd2_2  (nquery-header hdr "CD2_2"))
-
-         ;; X projections to go from IWS to RA, Dec
-         (a_0_0  (nquery-header hdr "A_0_0"))
-         (a_0_1  (nquery-header hdr "A_0_1"))
-         (a_0_2  (nquery-header hdr "A_0_2"))
-         (a_1_0  (nquery-header hdr "A_1_0"))
-         (a_1_1  (nquery-header hdr "A_1_1"))
-         (a_2_0  (nquery-header hdr "A_2_0"))
-
-         ;; Y projections
-         (b_0_0  (nquery-header hdr "B_0_0"))
-         (b_0_1  (nquery-header hdr "B_0_1"))
-         (b_0_2  (nquery-header hdr "B_0_2"))
-         (b_1_0  (nquery-header hdr "B_1_0"))
-         (b_1_1  (nquery-header hdr "B_1_1"))
-         (b_2_0  (nquery-header hdr "B_2_0")))
+  (with-accessors ((cr_ra  platesoln-cr_ra)   ;; Center coords
+                   (cr_dec platesoln-cr_dec)
+                   (cr_x   platesoln-cr_x)
+                   (cr_y   platesoln-cr_y)
+                   (cd1_1  platesoln-cd1_1)   ;; transform from pixels to IWS
+                   (cd1_2  platesoln-cd1_2)
+                   (cd2_1  platesoln-cd2_1)
+                   (cd2_2  platesoln-cd2_2)
+                   (a_0_0  platesoln-a_0_0)   ;; X projections to go from IWS to RA, Dec
+                   (a_0_1  platesoln-a_0_1)
+                   (a_0_2  platesoln-a_0_2)
+                   (a_1_0  platesoln-a_1_0)
+                   (a_1_1  platesoln-a_1_1)
+                   (a_2_0  platesoln-a_2_0)
+                   (b_0_0  platesoln-b_0_0)   ;; Y projections
+                   (b_0_1  platesoln-b_0_1)
+                   (b_0_2  platesoln-b_0_2)
+                   (b_1_0  platesoln-b_1_0)
+                   (b_1_1  platesoln-b_1_1)
+                   (b_2_0  platesoln-b_2_0)) (img-plate img)
     (labels ((to-undistorted (xp yp)
                ;; distortion mapping
                ;; Image coords have origin at top-left corner, middle of pixel 0 is (0.5, 0.5)
@@ -599,7 +600,47 @@ https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/345/gaia2&-c=240.005064%
 (to-radec *saved-img* 0 1920)           ;; bot-left
   |#
 
-(defun get-star-positions (img)
+(defun get-plate-solution (img)
+  (let+ ((hdr (img-hdr img)))
+    (labels ((need-real (fld)
+               (let ((ans (nquery-header hdr fld)))
+                 (unless (realp ans)
+                   (error "~%Image needs plate solution!"))
+                 ans)))
+      (setf (img-plate img)
+            (make-platesoln
+             ;; Center coords
+             :cr_ra   (need-real "CRVAL1")
+             :cr_dec  (need-real "CRVAL2")
+             :cr_x    (need-real "CRPIX1")
+             :cr_y    (need-real "CRPIX2")
+             
+             ;; transform from pixels to IWS
+             :cd1_1   (need-real "CD1_1")
+             :cd1_2   (need-real "CD1_2")
+             :cd2_1   (need-real "CD2_1")
+             :cd2_2   (need-real "CD2_2")
+            
+             ;; X projections to go from IWS to RA, Dec
+             :a_0_0   (need-real "A_0_0")
+             :a_0_1   (need-real "A_0_1")
+             :a_0_2   (need-real "A_0_2")
+             :a_1_0   (need-real "A_1_0")
+             :a_1_1   (need-real "A_1_1")
+             :a_2_0   (need-real "A_2_0")
+             
+             ;; Y projections
+             :b_0_0   (need-real "B_0_0")
+             :b_0_1   (need-real "B_0_1")
+             :b_0_2   (need-real "B_0_2")
+             :b_1_0   (need-real "B_1_0")
+             :b_1_1   (need-real "B_1_1")
+             :b_2_0   (need-real "B_2_0")
+             ))
+      )))
+
+(defun #1=get-star-positions (img)
+  (get-plate-solution img)
   (format t "~%Using plate solution to assign star positions...")
   (labels ((get-star-pos (star)
              (let+ ((:mvb (α δ) (to-radec img (star-x star) (star-y star))))
@@ -623,7 +664,7 @@ https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/345/gaia2&-c=240.005064%
          (xpxsiz (nquery-header hdr "XPIXSZ"))
          (ypxsiz (nquery-header hdr "YPIXSZ"))
          (foclen (nquery-header hdr "FOCALLEN"))
-         (radius (* 1.5
+         (radius (* 2
                     (rtod
                      (atan (/ (abs (complex (* nxpix xpxsiz) (* nypix ypxsiz)))
                               foclen 2000)))
@@ -733,6 +774,8 @@ cr_ra cr_dec radius)))
 
 
 (defun find-stars-in-cat (img)
+  (unless (img-plate img)
+    (error "~%Image needs plate solution!"))
   (format t "~%Finding stars in catalog...")
   (flet ((mapping-fn (star)
            (let ((ans (find-star-in-cat img star)))

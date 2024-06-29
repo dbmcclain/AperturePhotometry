@@ -86,7 +86,9 @@
   cat              ;; Text Catalog from Vizier Gaia DR2
   ncat             ;; Fast lookup table for catalog
   canon            ;; Holds canonical view rotation info
+  cimg             ;; The canonical view image
   is-see           ;; True when image is from a Seestar S50
+  plate            ;; The plate solution for the image
   )
 
 (defstruct star
@@ -142,32 +144,41 @@
                     (send cust))))
            (cat  (create
                   (lambda (cust)
-                    (get-catalog img)
-                    (format t "~%Catalog has arrived!")
-                    (send who-finished-first? :cat)
-                    (send cust)))))
+                    (handler-case
+                        (progn
+                          (get-catalog img)
+                          (format t "~%Catalog has arrived!")
+                          (send who-finished-first? :cat)
+                          (send cust))
+                      (error ()
+                        (format t "~%Image needs plate solution!"))
+                      ))))
+           (cat-match (create
+                       (lambda* _
+                         (find-stars-in-cat img)
+                         (show-match img)
+                         (report-stars img)
+                         )))
+           (vmax (reduce #'max (vm:make-overlay-vector (img-arr img)))))
       (setf (img-s0sq img) s0sq)
-      (let ((vmax (reduce #'max (vm:make-overlay-vector (img-arr img))))) 
-        (if (> vmax (if (img-is-see img)
-                        #.(- 65536 256)
-                      #.(- 4096 64)))
-            (warn "Image likely contains blown-out stars")
-          (when (> vmax (if (img-is-see img)
-                            32768
-                          2048))
-            (warn "Image possibly contains saturated stars"))))
-      (β _
-          (progn
-            (send (fork meas cat) β)
-            img)
-        (find-stars-in-cat img)
-        (show-match img)
-        (report-stars img))
+      (if (> vmax (if (img-is-see img)
+                      #.(- 65536 256)
+                    #.(- 4096 64)))
+          (warn "Image likely contains blown-out stars")
+        (when (> vmax (if (img-is-see img)
+                          32768
+                        2048))
+            (warn "Image possibly contains saturated stars")))
+      (send (fork meas cat) cat-match)
+      img
       )))
 
 #|
 (with-seestar
-  (setf *saved-img* (photom)))
+  (let ((img (photom)))
+    (when img
+      (setf *saved-img* img))
+    ))
 |#
 ;; ------------------------------------------------------------------------------
 ;; Subslices of images...
@@ -1022,7 +1033,7 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
               :yrange `(,(ceiling (+ 0.5 maxcm)) ,(floor (- mincm 0.5)))
               :color :red
               :thick 2
-              :title "Flux vs Cat GMag"
+              :title "Flux vs Cat Gmag"
               :xtitle "Flux [e-]"
               :ytitle "Cat GMag [mag]")
     (plt:plot 'zp flux cmags
