@@ -111,7 +111,8 @@
 (defun measure-location (img x y &key (srch-radius 4))
   (let+ ((:mvb (xx yy arr) (canon-xform img x y)))
     (when (array-in-bounds-p arr yy xx)
-      (let+ ((himg         (img-himg img))
+      (let+ ((gain         (img-gain img)) ;; e-/ADU
+             (himg         (img-himg img))
              (harr         (img-arr himg))
              (med          (img-med img))
              (s0sq         (img-s0sq img))
@@ -132,8 +133,7 @@
             (format t "~%!! Star possibly in saturation !!")
             ))
         (if (plusp ampl)
-            (let+ ((gain   (img-gain img)) ;; e-/ADU
-                   (ampl   (* gain ampl))
+            (let+ ((ampl   (* gain ampl))
                    (tnoise (sqrt (+ ampl (* gain gain s0sq))))
                    (thresh (* nsigma tnoise))
                    (snr    (/ ampl tnoise)))
@@ -593,7 +593,8 @@
   ;; thresh in sigma units
   ;; Find and measure stars in the image.
   (format t "~%Finding stars...")
-  (let+ ((krnl        (img-fake-star ref-img))
+  (let+ ((gain        (img-gain ref-img)) ;; e-/ADU
+         (krnl        (img-fake-star ref-img))
          (s0sq        (img-s0sq ref-img))
          (nsigma      thresh)
          (:mvb (himg fimg) (make-himg ref-img fimg))
@@ -617,8 +618,7 @@
                                        (when (>= (bref srch-arr y x) mult-thr)
                                          (let+ ((:mvb (yc xc pk)   (locate-peak srch-arr y x)))
                                            (when (box-contains-pt-p srch-box xc yc)
-                                             (let+ ((gain   (img-gain ref-img)) ;; e-/ADU
-                                                    (ampl   (* gain (aref harr yc xc)))
+                                             (let+ ((ampl   (* gain (aref harr yc xc)))
                                                     (tnoise (sqrt (+ ampl (* gain gain s0sq))))
                                                     (snr    (/ ampl tnoise)))
                                                (when (>= snr nsigma)

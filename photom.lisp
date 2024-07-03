@@ -178,6 +178,7 @@
   (let ((img (photom)))
     (when img
       (setf *saved-img* img))
+    (values)
     ))
 |#
 ;; ------------------------------------------------------------------------------
@@ -1166,8 +1167,9 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
     ))
             
 (defun phot-limit (img)
-  (let* ((nf-sigma (* (img-gain img) (sqrt (img-s0sq img))))
-         (dom      '(7 24)))
+  (let* ((gain     (img-gain img))
+         (nf-sigma (* gain (sqrt (img-s0sq img))))
+         (dom      '(6 19)))
     (labels ((inv-mag (x)
                (expt 10.0 (* -0.4 (- x (img-mag-off img)))))
              (nf (flux nf)
@@ -1189,7 +1191,7 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
                  :legend "No Noise")
       (plt:fplot 'phot-limit dom (um:rcurry #'snr nf-sigma)
                  :thick 2
-                 :legend (format nil "Noise Floor 1σ = ~4,1Fdu" (/ nf-sigma *gain*)))
+                 :legend (format nil "Noise Floor 1σ = ~4,1Fdu" (/ nf-sigma gain)))
       (plt:plot 'phot-limit dom `(,(db10 5) ,(db10 5))
                 :color :gray50
                 :thick 3

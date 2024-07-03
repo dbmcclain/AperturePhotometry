@@ -48,9 +48,9 @@
              (bzero  (truncate (or (nquery-header hdr "bzero")  0)))
              (bscale (truncate (or (nquery-header hdr "bscale") 1)))
              (bayer  (nquery-header hdr "bayerpat")) ;; should return as a quoted symbol, e.g., 'GRBG
-             (gain   (or (nquery-header hdr "gain") 150))
+             ;; (gain   (or (nquery-header hdr "gain") 1))
              (instr  (query-header hdr "INSTRUME"))
-             (is-seestar (search "Seestar" instr
+             (is-seestar (search "Seestar" instr       ;; else Vespara II?
                                  :test #'equalp)) 
              )
 
@@ -121,7 +121,9 @@
                :med  med
                :mad  mad
                :hdr  hdr
-               :gain gain
+               :gain (if is-seestar
+                         1.1
+                       0.6) ;; e-/ADU
                :is-see is-seestar)
               ))))
       )))

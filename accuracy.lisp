@@ -663,17 +663,18 @@ https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/345/gaia2&-c=240.005064%
   (let+ (((nypix nxpix) (array-dimensions (img-arr img)))
          (:mvb (cr_ra cr_dec) (to-radec img (/ nxpix 2) (/ nypix 2)))
          (hdr    (img-hdr img))
-         (xpxsiz (nquery-header hdr "XPIXSZ"))
-         (ypxsiz (nquery-header hdr "YPIXSZ"))
-         (foclen (nquery-header hdr "FOCALLEN"))
+         (xpxsiz (or (nquery-header hdr "XPIXSZ") 3))
+         (ypxsiz (or (nquery-header hdr "YPIXSZ") 3))
+         (foclen (or (nquery-header hdr "FOCALLEN") 250))
          (radius (* 1
                     (rtod
                      (atan (/ (abs (complex (* nxpix xpxsiz) (* nypix ypxsiz)))
                               foclen 2000)))
                     ))
          (cmdstr (format nil
-"vizquery -mime=csv -source=I/345/gaia2 -c=~F%20~F -c.r=~F -c.u=deg -out.form='|' -out.add=RA_ICRS,DE_ICRS -out=pmRA -out=pmDE -out=Source -out=Gmag -out=RPmag -out=BPmag -out=Plx -out=RV -out=Rad -out=Lum Gmag=0..16"
+"vizquery -mime=csv -source=I/345/gaia2 -c=~F%20~F -c.r=~F -c.u=deg -out.form='|' -out.add=RA_ICRS,DE_ICRS -out=pmRA -out=pmDE -out=Source -out=Gmag -out=RPmag -out=BPmag -out=Plx -out=RV -out=Rad -out=Lum Gmag=0..15"
 cr_ra cr_dec radius)))
+    (format t "~%Vizier request:~%~A" cmdstr)
     (setf (img-cat img)
           (with-open-stream (sin (sys:open-pipe cmdstr :direction :input))
             (loop for line = (read-line sin nil sin nil)
