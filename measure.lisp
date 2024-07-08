@@ -692,20 +692,20 @@
                                             :element-type '(complex single-float))))
              (fftfn         (if (eq dir :fwd)
                                 #'fft:fwd
-                              #'fft:inv)))
-        (labels ((row-handler (start end)
-                   (loop for row from start below end do
-                           (let ((rdst (array-row dst row))
-                                 (rsrc (array-row arr row)))
-                             (funcall fftfn rsrc :dest rdst)
-                             )))
-                 (col-handler (start end)
-                   (loop for col from start below end do
-                           (let+ ((csrc (array-col dst col))
-                                  (ans  (funcall fftfn csrc :dest csrc)))
-                             (setf (array-col dst col) ans)
-                             ))))
-          (β _
+                              #'fft:inv))
+             (:fn row-handler (start end)
+              (loop for row from start below end do
+                      (let ((rdst (array-row dst row))
+                            (rsrc (array-row arr row)))
+                        (funcall fftfn rsrc :dest rdst)
+                        )))
+             (:fn col-handler (start end)
+              (loop for col from start below end do
+                      (let+ ((csrc (array-col dst col))
+                             (ans  (funcall fftfn csrc :dest csrc)))
+                        (setf (array-col dst col) ans)
+                        ))))
+        (β _
               (send (make-split-task #'row-handler 0 nrows) β)
             (β _
                 (send (make-split-task #'col-handler 0 ncols) β)
