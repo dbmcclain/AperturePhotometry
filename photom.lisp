@@ -138,27 +138,33 @@
                                  ))
            (meas (create
                   (lambda (cust)
-                    (measure-stars img)
-                    (get-star-positions img)
-                    (send who-finished-first? :meas)
-                    (send cust))))
+                    (β _
+                        (measure-stars β img)
+                      (β _
+                          (get-star-positions β img)
+                        (send who-finished-first? :meas)
+                        (send cust))))
+                  ))
            (cat  (create
                   (lambda (cust)
-                    (handler-case
-                        (progn
-                          (get-catalog img)
-                          (format t "~%Catalog has arrived!")
-                          (send who-finished-first? :cat)
-                          (send cust))
-                      (error ()
-                        (format t "~%Image needs plate solution!"))
-                      ))))
+                    (β _
+                        (handler-case
+                            (get-catalog β img)
+                          (error ()
+                            (format t "~%Image needs plate solution!")))
+                      (format t "~%Catalog has arrived!")
+                      (send who-finished-first? :cat)
+                      (send cust)
+                      ))
+                  ))
            (cat-match (create
                        (lambda* _
-                         (find-stars-in-cat img)
-                         (show-match img)
-                         (report-stars img)
-                         )))
+                         (β _
+                             (find-stars-in-cat β img)
+                           (β _
+                               (show-match β img)
+                             (report-stars img)
+                             )))))
            (vmax (reduce #'max (vm:make-overlay-vector (img-arr img)))))
       (setf (img-s0sq img) s0sq)
       (if (> vmax (if (img-is-see img)
@@ -978,7 +984,7 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
 
 ;; ------------------------------------------------------------
 
-(defun show-match (img)
+(defun show-match (cust img)
   (let+ ((stars  (remove nil (img-stars img)
                          :key #'star-catv)) ;; remove any found stars without catalog matches
          (xs     (mapcar #'star-dx stars))
@@ -1053,7 +1059,7 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
         (incf (star-mag star) dmag))
       (setf (img-mag-off img) y0))
     ;; (show-img 'img img)
-    (canon-view img)
+    (canon-view cust img)
     ))
 
 #|

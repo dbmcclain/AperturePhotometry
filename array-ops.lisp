@@ -106,6 +106,18 @@
     (vec arr :start offs :end   end)
     ))
 
+(defun set-array-row (arr row src &key (start 0) end)
+  (let* ((offs  (array-row-major-index arr row start))
+         (end   (+ offs (if end
+                            (- end start)
+                          (array-dimension arr 1))))
+         (dst   (vec arr :start offs :end end)))
+    (replace dst src)
+    src))
+
+(defsetf array-row (arr row &key (start 0) end) (src)
+  `(set-array-row ,arr ,row ,src :start ,start :end ,end))
+
 (defun array-col (arr col &key (start 0) end)
   (let* ((ht   (- (or end (array-dimension arr 0)) start))
          (vec  (make-array ht
@@ -115,6 +127,19 @@
           do
             (setf (aref vec dst-row) (aref arr src-row col)))
     vec))
+
+(defun set-array-col (arr col src &key (start 0) end)
+  (let* ((ht   (- (or end (array-dimension arr 0)) start))
+         (vec  (vec src)))
+    (loop for dst-row from start below (+ start ht)
+          for src-row from 0
+          do
+            (setf (aref arr dst-row col) (aref vec src-row)))
+    src))
+
+(defsetf array-col (arr col &key (start 0) end) (src)
+  `(set-array-col ,arr ,col ,src :start ,start :end ,end))
+         
 
 (defun extract-subarray (arr box)
   (let+ ((dst-arr (make-array `(,(- (box-bottom box) (box-top box))

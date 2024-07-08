@@ -355,7 +355,7 @@ https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/345/gaia2&-c=240.005064%
             :yrange '(0 0.1)))
  |#
 
-(defun bare-canon-view (img)
+(defun bare-canon-view (cust img)
   (let+ ((xform   (find-angle img))
          (arr     (img-arr img))
          (cwd     (* 2 (rotxform-cxc xform)))
@@ -365,7 +365,9 @@ https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/345/gaia2&-c=240.005064%
                               :element-type 'single-float
                               :initial-element 0f0)))
     (setf (img-arr cimg)       carr
-          (img-canon cimg)     xform)
+          (img-canon cimg)     xform
+          (img-cimg  img)      cimg
+          (img-cimg cimg)      cimg)
     (labels ((wc-to-pix (x y)
                (let+ ((:mvb (xu yu) (inv-rotxform xform x y)))
                  (values (round xu)
@@ -378,16 +380,17 @@ https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/345/gaia2&-c=240.005064%
                                    (setf (aref carr row col) (aref arr srow scol)))
                                  )))
                ))
-      (split-task #'farmer 0 cht)
-      (show-img 'canon cimg)
-      (setf (img-cimg img)  cimg
-            (img-cimg cimg) cimg)
-      )))
+      (β _
+          (send (make-split-task #'farmer 0 cht) β)
+        (show-img 'canon cimg)
+        (send cust cimg)
+        ))))
 
-(defun canon-view (img)
-  (let ((cimg (bare-canon-view img)))
+(defun canon-view (cust img)
+  (β (cimg)
+      (bare-canon-view β img)
     (annotate-cimg cimg)
-    cimg
+    (send cust cimg)
     ))
 
 (defun short-format-ra (radeg)
@@ -639,7 +642,7 @@ https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/345/gaia2&-c=240.005064%
              ))
       )))
 
-(defun #1=get-star-positions (img)
+(defun #1=get-star-positions (cust img)
   (unless (img-plate img)
     (get-plate-solution img))
   (format t "~%Using plate solution to assign star positions...")
@@ -651,12 +654,12 @@ https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/345/gaia2&-c=240.005064%
            (handle-sublist (lst)
              (dolist (star lst)
                (get-star-pos star))))
-    (split-list-task #'handle-sublist (img-stars img))
+    (send (make-split-list-task #'handle-sublist (img-stars img)) cust)
     ))
 
 ;; ---------------------------------------------------------------
 
-(defun get-catalog (img)
+(defun get-catalog (cust img)
   (unless (img-plate img)
     (get-plate-solution img))
   (format t "~%Requesting star catalog from Vizier...")
@@ -680,17 +683,20 @@ cr_ra cr_dec radius)))
             (loop for line = (read-line sin nil sin nil)
                   until (eql line sin)
                   collect line)))
-    (prep-cat img)
-    (gen-fast-cat-index img)
-    ))
+    (β _
+        (prep-cat β img)
+      (gen-fast-cat-index cust img)
+      )))
 
-(defun gen-fast-cat-index (img)
+(defun gen-fast-cat-index (cust img)
   (format t "~%Catalog Indexing...")
   (let ((tbl  (make-hash-table :test #'=)))
     (um:nlet iter ((ix  -1)
                    (cat (img-ncat img)))
       (if (endp cat)
-          (setf (img-ncat img) tbl)
+          (progn
+            (setf (img-ncat img) tbl)
+            (send cust))
         (let ((ix-new (floor (car (car cat)))))
           (if (= ix-new ix)
               (go-iter ix (cdr cat))
@@ -702,7 +708,7 @@ cr_ra cr_dec radius)))
         ))
     ))
 
-(defun prep-cat (img)
+(defun prep-cat (cust img)
   (format t "~%Catalog Prep...")
   (um:nlet iter ((cat (img-cat img)))
     (when cat
@@ -723,13 +729,16 @@ cr_ra cr_dec radius)))
                        ))
                    ))
             (let+ ((hdr1  str)
-                   (hdr2  (cadr cat))
-                   (ncat  (split-map #'mapping-fn (nthcdr 3 cat))))
-              (format t "~%~D stars in catalog" (length ncat))
-              (setf (img-ncat img) (stable-sort                 ;; sort RA ascending
-                                    (sort ncat #'< :key #'cadr) ;; sort Dec ascending
-                                    #'< :key #'car))
-              ))
+                   (hdr2  (cadr cat)))
+              (β (ncat)
+                  (split-map β #'mapping-fn (nthcdr 3 cat))
+                (format t "~%~D stars in catalog" (length ncat))
+                (setf (img-ncat img) (stable-sort
+                                      ;; sort RA ascending
+                                      (sort ncat #'< :key #'cadr) ;; sort Dec ascending
+                                      #'< :key #'car))
+                (send cust)
+                )))
           )))))
                          
 ;; ---------------------------------------------------------------
@@ -776,7 +785,7 @@ cr_ra cr_dec radius)))
       )))
 
 
-(defun find-stars-in-cat (img)
+(defun find-stars-in-cat (cust img)
   (unless (img-plate img)
     (error "~%Image needs plate solution!"))
   (format t "~%Finding stars in catalog...")
@@ -794,9 +803,11 @@ cr_ra cr_dec radius)))
                        (star-dy   star) nil)
                  nil))
              )))
-    (let+ ((found  (split-map #'mapping-fn (img-stars img))))
+    (β (found)
+        (split-map β #'mapping-fn (img-stars img))
       (format t "~%~D stars found in catalog" (length found))
       (hilight-stars 'stars found :yellow)
+      (send cust)
       )))
                     
 #|
