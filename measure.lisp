@@ -412,6 +412,7 @@
                    (radius fake-radius)) prof
     (let+ ((box    (move-box box (- (round x) radius) (- (round y) radius)))
            (star   (extract-subarray arr box))
+           (star   (resample-star star y x))
            (ssum   (vm:total star))
            (kssum  (vm:inner-prod krnl star))
            (ampl   (/ (- (* npix kssum)
@@ -443,6 +444,49 @@
        (arr  (map-array (um:rcurry #'coerce 'single-float) (fake-krnl prof))))
   (measure-flux arr 7 7 prof))
  |#
+
+;; -------------------------------------------------------------
+;; Resample Star
+
+(defun resample-star (arr y x)
+  #+nil
+  (plt:tvscl 'res-star arr
+             :clear t
+             :title "Initial Star"
+             :vflip t
+             :magn 16)
+  
+  (let+ (( (ny nx) (array-dimensions arr))
+         (wrk  (make-array `(,ny ,nx)
+                           :element-type 'single-float
+                           :initial-element 0.0s0))
+         (dx   (- x (round x)))
+         (dy   (- y (round y))))
+    (loop for iy from 0 below ny do
+            (loop for ix from 0 below nx do
+                    (let* ((fy   (+ iy dy))
+                           (iy<  (max 0 (floor fy)))
+                           (iy>  (min (1- ny) (ceiling fy)))
+                           (dely (- fy iy<))
+                           (fx   (+ ix dx))
+                           (ix<  (max 0 (floor fx)))
+                           (ix>  (min (1- nx) (ceiling fx)))
+                           (delx (- fx ix<)))
+                      (setf (aref wrk iy ix)
+                            (+ (* (- 1 delx) (- 1 dely) (aref arr iy< ix<))
+                               (* (- 1 delx) dely       (aref arr iy> ix<))
+                               (* delx       (- 1 dely) (aref arr iy< ix>))
+                               (* delx       dely       (aref arr iy> ix>))))
+                      )))
+    #+nil
+    (plt:tvscl 'res-ctr-star wrk
+               :clear t
+               :title "Centered Star"
+               :vflip t
+               :magn 16)
+    ;; (break)
+    wrk))
+           
 
 ;; -------------------------------------------------------------
 ;; Noise behavior of matched filtering
@@ -711,7 +755,7 @@
                 (send (make-split-task #'col-handler 0 ncols) β)
               (send cust dst)
               )))
-        ))))
+        )))
 
 (defun make-himg (cust img fimg)
   ;; Cross-correlate the image array with a Gaussian kernel.
@@ -1066,7 +1110,7 @@
 |#
 
 (defun hilight-stars (img-pane stars color)
-  (plt:with-delayed-update (img-pane)
+  (plt:with-delayed-update img-pane
     (dolist (star stars)
       (with-accessors ((ix  star-x)
                        (iy  star-y)) star
@@ -1131,11 +1175,11 @@
                (trimmed (remove-if (lambda (star)
                                      (< (aref arr (round (star-y star)) (round (star-x star))) 32768))
                                    stars)))
-          (plt:with-delayed-update ('himg)
+          (plt:with-delayed-update 'himg
             (show-img 'himg himg)
             (hilight-stars 'himg stars :green)
             (hilight-stars 'himg trimmed :red))
-          (plt:with-delayed-update ('stars)
+          (plt:with-delayed-update 'stars
             (show-img 'stars img)
             (hilight-stars 'stars stars :green)
             (hilight-stars 'stars trimmed :red)))

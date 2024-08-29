@@ -233,7 +233,7 @@
                              (find-stars img 5)
                              #'<
                              :key 'star-y)))
-    (plt:with-delayed-update ('found-sky)
+    (plt:with-delayed-update 'found-sky
       (show-img 'found-sky img)
       (hilight-stars 'found-sky found-stars  :green)
       (hilight-stars 'found-sky fake-star-positions :magenta))

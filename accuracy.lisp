@@ -409,7 +409,7 @@ https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/345/gaia2&-c=240.005064%
     ))
 
 (defun annotate-cimg (img)
-  (plt:with-delayed-update ('canon)
+  (plt:with-delayed-update 'canon
     (let+ ((arr     (img-arr img))
            ((ht wd) (array-dimensions arr))
            (info    (img-canon img)))

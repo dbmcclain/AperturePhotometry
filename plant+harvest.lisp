@@ -101,7 +101,7 @@
          (mags        nil)
          (snrs        nil))
     #|
-    (plt:with-delayed-update ('fake-sky)
+    (plt:with-delayed-update 'fake-sky
       (show-img 'fake-sky img)
       (hilight-stars 'fake-sky found-stars  :green)
       (hilight-stars 'fake-sky fake-star-positions :magenta))
