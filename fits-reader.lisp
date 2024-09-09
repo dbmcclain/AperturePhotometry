@@ -121,9 +121,10 @@
                :med  med
                :mad  mad
                :hdr  hdr
-               :gain (if is-seestar
-                         1.1
-                       0.6) ;; e-/ADU
+               :gain (* 1/16  ;; for 12-bit ADC shifted left by 4 bits for 16-bit readout
+                        (if is-seestar ;; e-/ADU
+                            1.1   ;; IMX462 Seestar S50
+                          0.6))   ;; IMX565 Vespera II
                :is-see is-seestar)
               ))))
       )))

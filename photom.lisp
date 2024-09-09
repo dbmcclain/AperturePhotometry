@@ -18,7 +18,7 @@
 (defvar *fits-hdr*)
 (defvar *saved-img*)
 
-(defvar *gain*         80)  ;; e-/ADU
+(defvar *gain*         1)  ;; e-/ADU
 (defvar *mag-offset*   25f0)
 
 (defvar *fake-star*  nil)
@@ -1173,7 +1173,7 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
     ))
             
 (defun phot-limit (img)
-  (let* ((gain     (img-gain img))
+  (let* ((gain     (img-gain img))  ;; e-/ADU
          (nf-sigma (* gain (sqrt (img-s0sq img))))
          (dom      '(6 19)))
     (labels ((inv-mag (x)

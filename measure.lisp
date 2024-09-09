@@ -456,8 +456,9 @@
              :vflip t
              :magn 16)
   
-  (let+ (( (ny nx) (array-dimensions arr))
-         (wrk  (make-array `(,ny ,nx)
+  (let+ ((dims (array-dimensions arr))
+         ( (ny nx) dims)
+         (wrk  (make-array dims
                            :element-type 'single-float
                            :initial-element 0.0s0))
          (dx   (- x (round x)))
