@@ -103,7 +103,8 @@
 (defun measure-location (img x y &key (srch-radius 4))
   (let+ ((:mvb (xx yy arr) (canon-xform img x y)))
     (when (array-in-bounds-p arr yy xx)
-      (let+ ((gain         (img-gain img)) ;; e-/ADU
+      (let+ ((qe           0.8) ;; e-/photon
+             (gain         (/ (img-gain img) qe)) ;; photon/ADU
              (himg         (img-himg img))
              (harr         (img-arr himg))
              (med          (img-med img))
@@ -128,7 +129,8 @@
             (let+ ((ampl   (* gain ampl))
                    (tnoise (sqrt (+ ampl (* gain gain s0sq))))
                    (thresh (* nsigma tnoise))
-                   (snr    (/ ampl tnoise)))
+                   (snr    (/ ampl tnoise))
+                   (pk     (* gain (- pk med))))
               (format t "~%Peak value ~7,1F (raw ~D)" ampl (round pk))
               (format t "~%Thresh     ~7,1F" thresh)
               (if (>= snr nsigma)
@@ -154,7 +156,7 @@
                 (format t "~%Failed: Sum below threshold:~%   Mag ≈ ~4,1F  SNR ≈ ~3,1F"
                         (magn img ampl) snr)))
           (format t "~%Failed: Fitted amplitude not positive,~%   central peak ≈ ~4,1F mag"
-                  (magn img (- (aref arr yc xc) med)))
+                  (magn img (- pk med)))
           )))))
 
 ;; -------------------------------------------------------------------
@@ -630,7 +632,8 @@
   ;; thresh in sigma units
   ;; Find and measure stars in the image.
   (format t "~%Finding stars...")
-  (let+ ((gain        (img-gain ref-img)) ;; e-/ADU
+  (let+ ((qe          0.8) ;; e-/photon
+         (gain        (/ (img-gain ref-img) qe)) ;; phot/ADU
          (krnl        (img-fake-star ref-img))
          (s0sq        (img-s0sq ref-img))
          (nsigma      thresh))
@@ -638,6 +641,7 @@
         (make-himg β ref-img fimg)
       (let+ ((harr        (img-arr himg))
              (arr         (img-arr ref-img))
+             (med         (img-med ref-img))
              (thr         (* nsigma (sqrt s0sq)))
              (ring-radius (fake-radius krnl))
              (margin      (1+ ring-radius))
@@ -654,7 +658,7 @@
                                    (loop for x from (box-left srch-box) below (box-right srch-box)
                                          nconc
                                            (when (>= (bref srch-arr y x) mult-thr)
-                                             (let+ ((:mvb (yc xc pk)   (locate-peak srch-arr y x)))
+                                             (let+ ((:mvb (yc xc _)   (locate-peak srch-arr y x)))
                                                (when (box-contains-pt-p srch-box xc yc)
                                                  (let+ ((ampl   (* gain (aref harr yc xc)))
                                                         (tnoise (sqrt (+ ampl (* gain gain s0sq))))
@@ -669,7 +673,7 @@
                                                        `(,(make-star
                                                            :x    xcent
                                                            :y    ycent
-                                                           :pk   pk
+                                                           :pk   (* gain (- pk med))
                                                            :mag  (magn ref-img ampl)
                                                            :snr  (db10 snr)
                                                            :flux ampl

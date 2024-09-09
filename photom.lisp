@@ -1041,7 +1041,7 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
               :color :red
               :thick 2
               :title "Flux vs Cat Gmag"
-              :xtitle "Flux [e-]"
+              :xtitle "Flux [photons]"
               :ytitle "Cat GMag [mag]")
     (plt:plot 'zp flux cmags
               :symbol :dot
@@ -1068,7 +1068,7 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
 (report-stars *slice-img* :sort :y)
 (with-img *slice-img*
   (show-sub-dets 435 500))
-(Show-match *saved-img*)
+(Show-match sink *saved-img*)
 |#
 ;; ---------------------------------------------------------------
 ;; Slices - sub-images of images
@@ -1173,7 +1173,8 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
     ))
             
 (defun phot-limit (img)
-  (let* ((gain     (img-gain img))  ;; e-/ADU
+  (let* ((qe       0.8)  ;; e-/photon
+         (gain     (/ (img-gain img) qe))  ;; e-/ADU
          (nf-sigma (* gain (sqrt (img-s0sq img))))
          (dom      '(6 19)))
     (labels ((inv-mag (x)
@@ -1197,7 +1198,7 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
                  :legend "No Noise")
       (plt:fplot 'phot-limit dom (um:rcurry #'snr nf-sigma)
                  :thick 2
-                 :legend (format nil "Noise Floor 1σ = ~4,1Fdu" (/ nf-sigma gain)))
+                 :legend (format nil "Noise Floor 1σ = ~4,1F ADU" (/ nf-sigma gain)))
       (plt:plot 'phot-limit dom `(,(db10 5) ,(db10 5))
                 :color :gray50
                 :thick 3
