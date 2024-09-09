@@ -105,6 +105,7 @@
     (when (array-in-bounds-p arr yy xx)
       (let+ ((qe           0.8) ;; e-/photon
              (gain         (/ (img-gain img) qe)) ;; photon/ADU
+             (gain         1.0) ;; !!
              (himg         (img-himg img))
              (harr         (img-arr himg))
              (med          (img-med img))
@@ -634,6 +635,7 @@
   (format t "~%Finding stars...")
   (let+ ((qe          0.8) ;; e-/photon
          (gain        (/ (img-gain ref-img) qe)) ;; phot/ADU
+         (gain        1.0) ;; !!
          (krnl        (img-fake-star ref-img))
          (s0sq        (img-s0sq ref-img))
          (nsigma      thresh))

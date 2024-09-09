@@ -1041,7 +1041,7 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
               :color :red
               :thick 2
               :title "Flux vs Cat Gmag"
-              :xtitle "Flux [photons]"
+              :xtitle "Flux [ADU]"
               :ytitle "Cat GMag [mag]")
     (plt:plot 'zp flux cmags
               :symbol :dot
@@ -1175,6 +1175,7 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
 (defun phot-limit (img)
   (let* ((qe       0.8)  ;; e-/photon
          (gain     (/ (img-gain img) qe))  ;; e-/ADU
+         (gain     1.0) ;; !!
          (nf-sigma (* gain (sqrt (img-s0sq img))))
          (dom      '(6 19)))
     (labels ((inv-mag (x)

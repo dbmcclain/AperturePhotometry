@@ -117,31 +117,14 @@
                              :xtitle "(Value - Median) [σ]"
                              :ytitle "Density")
 
-              #|
-              ;; for 12-bit cameras IMX462, IMX585
-              ;; Convert image to e- counts
-              (let ((gain (if is-seestar  ;; e-/ADU
-                              (/ 1.1f0 16.)
-                            (/ 0.6f0 16.)))
-                    (qe   0.8f0)) ;; e-/photon
-                ;; Convert to photon counts above median pedestal
-                (dotimes (ix (array-total-size img))
-                  (setf (row-major-aref img ix)
-                        (* (- (row-major-aref img ix) med) (/ gain qe)))))
-              |#
-              
               (make-img
                :arr  img
                :med  med
                :mad  mad
                :hdr  hdr
-               ;; :gain 1.0f0
-               #||#
-               :gain (* 1/16  ;; for 12-bit ADC shifted left by 4 bits for 16-bit readout
-                        (if is-seestar ;; e-/ADU
-                            1.1   ;; IMX462 Seestar S50
-                          0.6))   ;; IMX585 Vespera II
-               #||#
+               :gain (if is-seestar ;; e-/ADU
+                         1.1   ;; IMX462 Seestar S50
+                       0.6)   ;; IMX585 Vespera II
                :is-see is-seestar)
               ))))
       )))
