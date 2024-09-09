@@ -18,13 +18,13 @@
 (defun sqr (x)
   (* x x))
 
-(defconstant +mad/sd+  1.4826f0)
+(defconstant +sd/mad+  1.4826f0)
 
 (defun sd-to-mad (sigma) ;; convert to sigma units
-  (* sigma +mad/sd+)) ;; assumes underlying is Normal Distr.
+  (/ sigma +sd/mad+)) ;; assumes underlying is Normal Distr.
 
 (defun mad-to-sd (mads)
-  (/ mads +mad/sd+))
+  (* mads +sd/mad+))
 
 ;; ---------------------------------------------------------------------
 

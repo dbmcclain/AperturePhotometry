@@ -90,7 +90,7 @@
             ;; show image statistics
             (let* ((med  (vm:median img))
                    (mad  (vm:mad img med))
-                   (sd   (* +mad/sd+ mad))
+                   (sd   (* +sd/mad+ mad))
                    (max  (reduce #'max (vec img))))
               (print (list :med med :mad mad :sigma sd :max max))
               #|
@@ -124,7 +124,7 @@
                :gain (* 1/16  ;; for 12-bit ADC shifted left by 4 bits for 16-bit readout
                         (if is-seestar ;; e-/ADU
                             1.1   ;; IMX462 Seestar S50
-                          0.6))   ;; IMX565 Vespera II
+                          0.6))   ;; IMX585 Vespera II
                :is-see is-seestar)
               ))))
       )))

@@ -544,7 +544,7 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
 
 (with-seestar
   (let* ((mad      11)
-         (nf-sigma (* mad +mad/sd+ (1+ (* 2 *core-radius*)))))
+         (nf-sigma (* mad +sd/mad+ (1+ (* 2 *core-radius*)))))
     (labels ((inv-mag (x)
                (expt 10.0 (* -0.4 (- x *mag-offset*))))
              (nf (x)
@@ -1132,7 +1132,7 @@ F_min = 12.5 ± Sqrt(156.25 + 25*NF^2)
     (when binarize
       (let* ((med (img-med new-img))
              (mad (img-mad new-img))
-             (sd  (* +mad/sd+ mad))
+             (sd  (* +sd/mad+ mad))
              (lim (+ med (* sd (img-thr new-img))))
              (vec (vm:make-overlay-vector new-arr)))
         (map-into vec (lambda (x)

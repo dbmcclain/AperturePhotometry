@@ -498,7 +498,7 @@
          (Δ     (fake-Δ prof))
          (npix  (fake-npix prof))
          (mad   (img-mad ref-img))
-         (sd    (* mad +mad/sd+)))
+         (sd    (* mad +sd/mad+)))
     (/ (* npix sd sd) Δ)))
 
 ;; -------------------------------------------------------------
